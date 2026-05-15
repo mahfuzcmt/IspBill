@@ -1,0 +1,62 @@
+# ========================================================================
+# PHPNuxBill — gitignore
+# ========================================================================
+# Keeps secrets out of the repo and lets the source tree stay clean.
+
+# ── Secrets / config (NEVER commit) ─────────────────────────────────────
+config.php
+.env
+.env.*
+*.env
+.deploy/
+backups/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Stand-alone database dumps anywhere in the tree
+*.sql
+*.sql.gz
+*.sql.bz2
+*.dump
+
+# ── Runtime / cache / uploads ──────────────────────────────────────────
+system/uploads/*
+!system/uploads/.gitkeep
+system/cache/*
+!system/cache/.gitkeep
+ui/compiled/*
+!ui/compiled/.gitkeep
+ui/cache/*
+!ui/cache/.gitkeep
+
+# Mikrotik / PHPNuxBill ad-hoc logs
+*.log
+logs/
+phpnuxbill-*.log
+
+# ── Editor / OS noise ─────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Dependency managers (keep this list narrow) ─────────────────────────
+node_modules/
+.composer-cache/
+# composer.lock IS kept — it pins versions.
+
+# ── Temporary files & misc ─────────────────────────────────────────────
+*.bak
+*.tmp
+*.orig
+*.rej
+*.lock~
+.htaccess.bak
