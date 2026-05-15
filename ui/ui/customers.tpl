@@ -13,7 +13,12 @@
 													<span class="fa fa-search"></span>
 												</div>
 												<input type="text" name="username" class="form-control" placeholder="{$_L['Search_by_Username']}...">
-												<select name="service_type" class="form-control" style="max-width:140px"><option value="PPPoE" {if !isset($service_type) || $service_type eq \'PPPoE\'}selected{/if}>PPPoE</option><option value="Hotspot" {if isset($service_type) && $service_type eq \'Hotspot\'}selected{/if}>Hotspot</option><option value="All" {if isset($service_type) && $service_type eq \'All\'}selected{/if}>All types</option></select><div class="input-group-btn">
+												<select name="service_type" class="form-control" style="max-width:140px">
+													<option value="PPPoE"   {if !isset($service_type) || $service_type eq 'PPPoE'}selected{/if}>PPPoE</option>
+													<option value="Hotspot" {if isset($service_type)  && $service_type eq 'Hotspot'}selected{/if}>Hotspot</option>
+													<option value="All"     {if isset($service_type)  && $service_type eq 'All'}selected{/if}>All types</option>
+												</select>
+												<div class="input-group-btn">
 													<button class="btn btn-success">{$_L['Search']}</button>
 												</div>
 											</div>
