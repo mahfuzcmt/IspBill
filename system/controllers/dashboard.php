@@ -40,8 +40,14 @@ if($u_all == ''){
     $u_all = '0';
 }
 $ui->assign('u_all',$u_all);
-//user expire
-$expire = ORM::for_table('tbl_user_recharges')->where('expiration',$mdate)->order_by_desc('id')->find_many();
+// Users whose plan has already expired during the current month. Show past-or-today
+// expirations only (future dates within this month aren't "expired" yet). Newest
+// expiration first so the most recent suspensions float to the top.
+$expire = ORM::for_table('tbl_user_recharges')
+    ->where_gte('expiration', $first_day_month)
+    ->where_lte('expiration', $mdate)
+    ->order_by_desc('expiration')->order_by_desc('id')
+    ->find_many();
 $ui->assign('expire',$expire);
 
 //activity log

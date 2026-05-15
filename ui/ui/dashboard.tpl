@@ -107,7 +107,9 @@
             </div>
         </div>
         <div class="panel panel-warning mb20 panel-hovered project-stats table-responsive">
-            <div class="panel-heading">{$_L['User_Expired_Today']}</div>
+            <div class="panel-heading">User Expired This Month
+                {if $expire|@count > 0}<small style="opacity:.85">({$expire|@count})</small>{/if}
+            </div>
             <div class="table-responsive">
                 <table class="table">
                     <thead>
@@ -116,6 +118,7 @@
                             <th>{$_L['Username']}</th>
                             <th>{$_L['Created_On']}</th>
                             <th>{$_L['Expires_On']}</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -124,13 +127,18 @@
                             <tr>
                                 <td>{$no++}</td>
                                 <td>{$expired['username']}</td>
-                                <td>{date($_c['date_format'], strtotime($expired['recharged_on']))} {$expired['time']}
-                                </td>
-                                <td>{date($_c['date_format'], strtotime($expired['expiration']))} {$expired['time']}
+                                <td>{date($_c['date_format'], strtotime($expired['recharged_on']))} {$expired['time']}</td>
+                                <td>{date($_c['date_format'], strtotime($expired['expiration']))} {$expired['time']}</td>
+                                <td>
+                                    <a href="{$_url}customers/billing/{$expired['customer_id']}" class="btn btn-info btn-xs" title="Open Billing to update status / renew / mark credit-paid">
+                                        <i class="ion ion-edit"></i> Billing
+                                    </a>
                                 </td>
                             </tr>
-                        </tbody>
-                    {/foreach}
+                        {foreachelse}
+                            <tr><td colspan="5" class="text-muted text-center" style="padding:14px">No customers have expired this month.</td></tr>
+                        {/foreach}
+                    </tbody>
                 </table>
             </div>
         </div>
