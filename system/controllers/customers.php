@@ -522,13 +522,23 @@ switch ($action) {
                             Mikrotik::setPpoeUserProfile($client, $username, $plan['name_plan']);
                         } catch (Throwable $e) { $routerWarning .= ' (plan push: ' . $e->getMessage() . ')'; }
                     }
-                    // Status changed
+                    // Status changed — use the "Suspended" PPP profile when status=off.
+                    // Suspended profile auto-adds the active client IP to address-list
+                    // "expired-users"; a firewall NAT rule then redirects their HTTP
+                    // traffic to /notice/<username>. They stay connected (at 256 kbps)
+                    // so they actually SEE the notice instead of just failing to dial.
                     if ($oldStatus !== $newStatus) {
                         try {
                             if ($newStatus === 'on') {
-                                Mikrotik::enablePpoeUser($client, $username);
+                                // Re-enable the secret (in case previously disabled by the
+                                // old cron) and put them back on their real plan profile.
+                                try { Mikrotik::enablePpoeUser($client, $username); } catch (Throwable $e) {}
+                                if ($plan) {
+                                    try { Mikrotik::setPpoeUserProfile($client, $username, $plan['name_plan']); } catch (Throwable $e) {}
+                                }
+                                try { Mikrotik::removePpoeActive($client, $username); } catch (Throwable $e) {}
                             } else {
-                                Mikrotik::disablePpoeUser($client, $username);
+                                try { Mikrotik::setPpoeUserProfile($client, $username, 'Suspended'); } catch (Throwable $e) {}
                                 try { Mikrotik::removePpoeActive($client, $username); } catch (Throwable $e) {}
                             }
                         } catch (Throwable $e) { $routerWarning .= ' (status push: ' . $e->getMessage() . ')'; }

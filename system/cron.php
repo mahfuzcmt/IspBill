@@ -92,11 +92,40 @@ foreach ($d as $ds) {
             $c = ORM::for_table('tbl_customers')->where('id', $ds['customer_id'])->find_one();
             $m = ORM::for_table('tbl_routers')->where('name', $ds['routers'])->find_one();
 
-            if (!$_c['radius_mode']) {
-                $client = Mikrotik::getClient($m['ip_address'], $m['username'], $m['password']);
-                Mikrotik::disablePpoeUser($client, $c['username']);
-                Mikrotik::removePpoeActive($client, $c['username']);
-                Message::sendExpiredNotification($c['phonenumber'], $c['fullname'], $u['namebp'], $textExpired, $config['user_notification_expired']);
+            if (empty($config['radius_mode'])) {
+                try {
+                    $client = Mikrotik::getClient($m['ip_address'], $m['username'], $m['password']);
+                    // NetPulse: move expired PPPoE users to the "Suspended" profile rather
+                    // than disabling the secret. The Suspended profile adds the client's IP
+                    // to address-list "expired-users", and a firewall NAT rule redirects
+                    // HTTP traffic from that list to /notice/<username> so the customer
+                    // sees a clear Bengali notice + payment info.
+                    try { Mikrotik::setPpoeUserProfile($client, $c['username'], 'Suspended'); } catch (Throwable $e) {}
+                    try { Mikrotik::removePpoeActive($client, $c['username']); } catch (Throwable $e) {}
+                    // Send the existing PHPNuxBill SMS notification (NetPulse SMS templates
+                    // are handled separately by the SmsSender helper; this preserves the
+                    // upstream behaviour for backwards compat).
+                    try {
+                        Message::sendExpiredNotification(
+                            $c['phonenumber'], $c['fullname'], $u['namebp'],
+                            $textExpired, $config['user_notification_expired']
+                        );
+                    } catch (Throwable $e) {}
+                    // Best-effort NetPulse SMS using our own templated sender
+                    if (class_exists('SmsSender')) {
+                        try {
+                            SmsSender::sendTemplate($c['phonenumber'], 'sms_template_expiry', [
+                                'company'    => isset($config['CompanyName']) ? $config['CompanyName'] : 'NetPulse',
+                                'fullname'   => $c['fullname'],
+                                'username'   => $c['username'],
+                                'plan'       => $u['namebp'],
+                                'expiration' => $u['expiration'],
+                            ]);
+                        } catch (Throwable $e) {}
+                    }
+                } catch (Throwable $e) {
+                    echo "  ROUTER push failed: " . $e->getMessage() . "\r\n";
+                }
             }
 
             $u->status = 'off';
