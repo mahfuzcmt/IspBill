@@ -13,7 +13,7 @@
 													<span class="fa fa-search"></span>
 												</div>
 												<input type="text" name="username" class="form-control" placeholder="{$_L['Search_by_Username']}...">
-												<div class="input-group-btn">
+												<select name="service_type" class="form-control" style="max-width:140px"><option value="PPPoE" {if !isset($service_type) || $service_type eq \'PPPoE\'}selected{/if}>PPPoE</option><option value="Hotspot" {if isset($service_type) && $service_type eq \'Hotspot\'}selected{/if}>Hotspot</option><option value="All" {if isset($service_type) && $service_type eq \'All\'}selected{/if}>All types</option></select><div class="input-group-btn">
 													<button class="btn btn-success">{$_L['Search']}</button>
 												</div>
 											</div>
@@ -110,4 +110,24 @@
 						</div>
 					</div>
 
+<script>
+{literal}
+(function () {
+    var form = document.getElementById('site-search');
+    if (!form) return;
+    var input  = form.querySelector('input[name="username"]');
+    var select = form.querySelector('select[name="service_type"]');
+    var timer = null;
+    function submit() {
+        clearTimeout(timer);
+        timer = setTimeout(function () { form.submit(); }, 300);
+    }
+    if (input)  input.addEventListener('input',  submit);
+    if (select) select.addEventListener('change', function () { form.submit(); });
+    // The Search button becomes redundant once live-search is on
+    var btn = form.querySelector('button.btn-success');
+    if (btn) btn.style.display = 'none';
+})();
+{/literal}
+</script>
 {include file="sections/footer.tpl"}

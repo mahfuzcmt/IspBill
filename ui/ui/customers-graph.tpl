@@ -223,7 +223,10 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
         }
         if (inFlight) { return; }
         inFlight = true;
-        var url = GRAPH_URL + '?minutes=' + rangeMinutes;
+        // GRAPH_URL already contains "?_route=...", so additional params join with "&".
+        // Using "?" here would produce two "?" in the URL and PHP would treat the second
+        // one as part of the _route value (username) — that was the empty-graph bug.
+        var url = GRAPH_URL + '&minutes=' + rangeMinutes;
         fetch(url, { credentials: 'same-origin' })
             .then(function (r) {
                 var ct = r.headers.get('content-type') || '';

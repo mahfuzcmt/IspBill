@@ -23,42 +23,60 @@ if ($admin['user_type'] != 'Admin' and $admin['user_type'] != 'Sales') {
 switch ($action) {
     case 'list':
         $ui->assign('xfooter', '<script type="text/javascript" src="ui/lib/c/customers.js"></script>');
-        $username = _post('username');
-        run_hook('list_customers'); #HOOK
-        if ($username != '') {
-            // Paginator::bootstrap uses exact-match where() and breaks with wildcards,
-            // returning null when no row's username equals literally '%arif%'. Build
-            // a paginator struct directly using where_like for the real count.
-            $whereSql = "WHERE c.username LIKE ?";
-            $params   = ['%' . $username . '%'];
-            $per_page = 10;
-            $page     = isset($routes['2']) && (int)$routes['2'] > 0 ? (int)$routes['2'] : 1;
-            $total    = ORM::for_table('tbl_customers')
-                        ->where_like('username', '%' . $username . '%')->count();
-            $startpoint = ($page - 1) * $per_page;
-            $lastpage   = max(1, (int) ceil($total / $per_page));
-            // Build a paginator HTML strip ourselves; Paginator class can't help here.
-            $linkBase  = U . $routes[0] . '/' . $routes[1] . '/';
-            $contents  = '<ul class="pagination pagination-sm">';
-            for ($i = 1; $i <= $lastpage; $i++) {
-                $contents .= $i == $page
-                    ? "<li class='active'><a href='javascript:void(0);'>$i</a></li>"
-                    : "<li><a href='{$linkBase}$i'>$i</a></li>";
-            }
-            $contents .= '</ul>';
-            $paginator = [
-                'startpoint' => $startpoint,
-                'limit'      => $per_page,
-                'found'      => $total,
-                'page'       => $page,
-                'lastpage'   => $lastpage,
-                'contents'   => $contents,
-            ];
-        } else {
-            $paginator = Paginator::bootstrap('tbl_customers');
-            $whereSql  = "";
-            $params    = [];
+        $username    = _post('username');
+        // Service-type filter: PPPoE (default), Hotspot, or All. Accepts POST or GET.
+        $serviceType = _post('service_type');
+        if ($serviceType === '' || $serviceType === null) {
+            $serviceType = isset($_GET['service_type']) ? trim((string)$_GET['service_type']) : 'PPPoE';
         }
+        // The actual DB value stored in tbl_user_recharges.type is 'PPPoE' or 'Hotspot' (case-sensitive).
+        if (!in_array($serviceType, ['PPPoE', 'Hotspot', 'All'])) $serviceType = 'PPPoE';
+        run_hook('list_customers'); #HOOK
+
+        // Build WHERE — both filters compose on top of the same JOINed view.
+        $whereParts = [];
+        $params     = [];
+        if ($username !== '') {
+            $whereParts[] = 'c.username LIKE ?';
+            $params[]     = '%' . $username . '%';
+        }
+        if ($serviceType !== 'All') {
+            $whereParts[] = 'r.type = ?';
+            $params[]     = $serviceType;
+        }
+        $whereSql = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+
+        // Count for paginator (same JOIN shape as the main query)
+        $countSql = "
+            SELECT COUNT(*) FROM tbl_customers c
+            LEFT JOIN (
+                SELECT customer_id, MAX(id) AS last_id FROM tbl_user_recharges GROUP BY customer_id
+            ) lr ON lr.customer_id = c.id
+            LEFT JOIN tbl_user_recharges r ON r.id = lr.last_id
+            $whereSql
+        ";
+        $cstmt = ORM::get_db()->prepare($countSql);
+        $cstmt->execute($params);
+        $total = (int) $cstmt->fetchColumn();
+
+        $per_page  = 10;
+        $page      = isset($routes['2']) && (int)$routes['2'] > 0 ? (int)$routes['2'] : 1;
+        $startpoint = ($page - 1) * $per_page;
+        $lastpage   = max(1, (int) ceil(max($total, 1) / $per_page));
+        $linkBase   = U . $routes[0] . '/' . $routes[1] . '/';
+        $contents   = '<ul class="pagination pagination-sm">';
+        $stq        = '?service_type=' . urlencode($serviceType);
+        for ($i = 1; $i <= $lastpage; $i++) {
+            $contents .= $i == $page
+                ? "<li class='active'><a href='javascript:void(0);'>$i</a></li>"
+                : "<li><a href='{$linkBase}{$i}{$stq}'>$i</a></li>";
+        }
+        $contents .= '</ul>';
+        $paginator = [
+            'startpoint' => $startpoint, 'limit' => $per_page, 'found' => $total,
+            'page' => $page, 'lastpage' => $lastpage, 'contents' => $contents,
+        ];
+        $ui->assign('service_type', $serviceType);
 
         // Latest recharge per customer (LEFT JOIN); sort by expiration ASC so
         // customers expiring soonest float to the top, NULLs (no plan) last.
