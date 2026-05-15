@@ -119,7 +119,7 @@
     <div class="col-sm-6">
         <div class="box box-primary box-hovered mb20 activities">
             <div class="box-header">
-                <h3 class="box-title">NetPulse <small>(based on PHPNuxBill)</small></h3>
+                <h3 class="box-title">NetPulse</h3>
             </div>
             <div class="box-body">
                 {$_L['Welcome_Text_Admin']}

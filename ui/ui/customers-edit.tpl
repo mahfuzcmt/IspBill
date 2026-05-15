@@ -162,6 +162,49 @@
                         </div>
                     </div>
                 </form>
+
+                <hr>
+                <h4>Send SMS to this customer</h4>
+                <form class="form-horizontal" method="POST" action="{$_url}sms/send-customer" style="margin-top:10px">
+                    <input type="hidden" name="customer_id" value="{$d['id']}">
+
+                    <div class="form-group">
+                        <label class="col-md-3 control-label">Template</label>
+                        <div class="col-md-6">
+                            <select name="template" class="form-control" id="sms-tpl">
+                                <option value="">— Custom (use message box below) —</option>
+                                <option value="sms_template_welcome">Welcome SMS</option>
+                                <option value="sms_template_recharge">Recharge confirmation</option>
+                                <option value="sms_template_expiry">Expiry reminder</option>
+                                <option value="sms_template_voucher">Voucher delivery</option>
+                            </select>
+                            <span class="help-block">
+                                If a template is picked, the message box is ignored and the template is rendered with this customer's data.
+                                Edit templates at <a href="{$_url}sms/settings" target="_blank">SMS Settings</a>.
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="col-md-3 control-label">Or freeform message</label>
+                        <div class="col-md-6">
+                            <textarea name="message" class="form-control" rows="3" placeholder="Hi {ldelim}fullname{rdelim}, your account..."></textarea>
+                            <span class="help-block">Placeholders <code>{ldelim}fullname{rdelim}</code>, <code>{ldelim}plan{rdelim}</code>, <code>{ldelim}expiration{rdelim}</code> etc. are supported here too.</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="col-md-offset-3 col-md-6">
+                            <button type="submit" class="btn btn-info">
+                                <i class="ion ion-paper-airplane"></i> Send to {$d['phonenumber']|default:'(no phone)'}
+                            </button>
+                            <span class="help-block">
+                                The SMS goes to <code>{$d['phonenumber']|default:'—'}</code>. Update the phone above and Save before sending if needed.
+                            </span>
+                        </div>
+                    </div>
+                </form>
+
             </div>
         </div>
     </div>

@@ -6,7 +6,7 @@
         </footer>
     {else}
         <footer class="main-footer">
-            NetPulse &middot; based on <a href="https://github.com/hotspotbilling/phpnuxbill" rel="nofollow noreferrer noopener" target="_blank">PHPNuxBill</a>, theme by <a href="https://adminlte.io/" rel="nofollow noreferrer noopener" target="_blank">AdminLTE</a>
+            NetPulse
         </footer>
     {/if}
 </div>

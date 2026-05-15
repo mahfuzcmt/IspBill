@@ -370,8 +370,28 @@ switch ($action) {
                 'User', $customerId);
         }
 
+        // Auto-send welcome SMS (best-effort)
+        $smsNote = '';
+        if (!empty($config['sms_enabled']) && $config['sms_enabled'] !== '0'
+            && $phonenumber !== '' && $plan) {
+            $vars = [
+                'company'    => isset($config['CompanyName']) ? $config['CompanyName'] : 'NetPulse',
+                'fullname'   => $fullname,
+                'username'   => $username,
+                'password'   => $password,
+                'phonenumber'=> $phonenumber,
+                'plan'       => $plan['name_plan'],
+                'price'      => $plan['price'],
+                'validity'   => $plan['validity'] . ' ' . $plan['validity_unit'],
+                'expiration' => $expiration,
+            ];
+            $res = SmsSender::sendTemplate($phonenumber, 'sms_template_welcome', $vars);
+            $smsNote = $res['ok'] ? ' (welcome SMS sent)' : ' (welcome SMS failed: ' . $res['error'] . ')';
+        }
+
         r2(U . 'customers/list', 's',
-            $plan ? "Customer $username created on plan {$plan['name_plan']}" : $_L['account_created_successfully']);
+            ($plan ? "Customer $username created on plan {$plan['name_plan']}" : $_L['account_created_successfully'])
+            . $smsNote);
         break;
 
     case 'edit-post':
