@@ -557,6 +557,166 @@ switch ($action) {
         r2(U . 'customers/list', 's', 'Customer updated' . $routerWarning);
         break;
 
+    case 'diagnose':
+    case 'diag':
+        $id = (int) $routes['2'];
+        $c  = ORM::for_table('tbl_customers')->find_one($id);
+        if (!$c) { r2(U . 'customers/list', 'e', $_L['Account_Not_Found']); }
+        $r = ORM::for_table('tbl_user_recharges')
+                ->where('customer_id', $id)->order_by_desc('id')->find_one();
+
+        $checks = []; $active = null; $secret = null; $queue = null; $logs = [];
+
+        // 1) Subscription state from DB
+        if (!$r) {
+            $checks[] = ['name'=>'Subscription','status'=>'warn',
+                'msg'=>'No recharge / plan',
+                'detail'=>'Customer has never been put on a plan. Use Edit to assign one.'];
+        } elseif ($r['status'] === 'off') {
+            $checks[] = ['name'=>'Subscription','status'=>'bad',
+                'msg'=>'Suspended (status = off)',
+                'detail'=>'Plan ' . $r['namebp'] . ', expired ' . $r['expiration'] . '. Customer needs to recharge.'];
+        } elseif (strtotime($r['expiration']) < strtotime(date('Y-m-d'))) {
+            $checks[] = ['name'=>'Subscription','status'=>'bad',
+                'msg'=>'Expired on ' . $r['expiration'],
+                'detail'=>'Recharge ' . $r['namebp'] . ' to reactivate. Customer is being redirected to the notice page.'];
+        } else {
+            $daysLeft = (int) ((strtotime($r['expiration']) - strtotime(date('Y-m-d'))) / 86400);
+            $cls = $daysLeft <= 3 ? 'warn' : 'ok';
+            $checks[] = ['name'=>'Subscription','status'=>$cls,
+                'msg'=>'Active on ' . $r['namebp'] . ' — expires ' . $r['expiration'] . " ($daysLeft day(s) left)"];
+        }
+
+        try {
+            $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+            if (!$rt) { throw new Exception('No router configured'); }
+            $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
+
+            // 2) PPP secret
+            try {
+                $req = new RouterOS\Request('/ppp/secret/print');
+                $req->setArgument('.proplist', '.id,name,disabled,profile,last-logged-out,last-caller-id');
+                $req->setQuery(RouterOS\Query::where('name', $c['username']));
+                foreach ($client->sendSync($req) as $rr) {
+                    if ($rr->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $secret = [
+                        'disabled'      => $rr->getProperty('disabled') === 'true',
+                        'profile'       => $rr->getProperty('profile'),
+                        'lastLoggedOut' => $rr->getProperty('last-logged-out'),
+                        'lastCallerId'  => $rr->getProperty('last-caller-id'),
+                    ];
+                }
+            } catch (Throwable $e) {}
+            if (!$secret) {
+                $checks[] = ['name'=>'Router secret','status'=>'bad',
+                    'msg'=>'No /ppp/secret for "' . $c['username'] . '"',
+                    'detail'=>'Customer cannot authenticate at all. Use Edit and push to router.'];
+            } elseif ($secret['disabled']) {
+                $checks[] = ['name'=>'Router secret','status'=>'bad',
+                    'msg'=>'PPP secret is DISABLED on the router',
+                    'detail'=>'Re-enable via Edit, set Status = Active, push to router.'];
+            } elseif ($secret['profile'] === 'Suspended') {
+                $checks[] = ['name'=>'Router secret','status'=>'warn',
+                    'msg'=>'On the Suspended profile (256 kbps + notice redirect)',
+                    'detail'=>'After recharge, set Status = Active. The plan profile is restored automatically.'];
+            } else {
+                $checks[] = ['name'=>'Router secret','status'=>'ok',
+                    'msg'=>'Enabled on profile "' . $secret['profile'] . '"'];
+            }
+
+            // 3) Active session
+            try {
+                $req = new RouterOS\Request('/ppp/active/print');
+                $req->setArgument('.proplist', 'name,address,uptime,caller-id');
+                $req->setQuery(RouterOS\Query::where('name', $c['username']));
+                foreach ($client->sendSync($req) as $rr) {
+                    if ($rr->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $active = [
+                        'address'  => $rr->getProperty('address'),
+                        'uptime'   => $rr->getProperty('uptime'),
+                        'callerId' => $rr->getProperty('caller-id'),
+                    ];
+                }
+            } catch (Throwable $e) {}
+            if ($active) {
+                $checks[] = ['name'=>'Connection','status'=>'ok',
+                    'msg'=>'ONLINE from ' . $active['address'] . ', uptime ' . $active['uptime'],
+                    'detail'=>'MAC: ' . $active['callerId']];
+            } else {
+                $detail = '';
+                if ($secret) {
+                    if ($secret['lastLoggedOut']) $detail .= 'Last logged out: ' . $secret['lastLoggedOut'];
+                    if ($secret['lastCallerId'])  $detail .= ($detail ? ', ' : '') . 'last MAC: ' . $secret['lastCallerId'];
+                }
+                $checks[] = ['name'=>'Connection','status'=>'warn',
+                    'msg'=>'Currently OFFLINE',
+                    'detail'=>$detail ?: 'No connection history. Customer router/ONU may be powered off, mis-configured, or never connected.'];
+            }
+
+            // 4) Current rate
+            try {
+                $req = new RouterOS\Request('/queue/simple/print');
+                $req->setArgument('stats', 'yes');
+                $req->setArgument('.proplist', 'name,bytes,rate');
+                $req->setQuery(RouterOS\Query::where('name', '<pppoe-' . $c['username'] . '>'));
+                foreach ($client->sendSync($req) as $rr) {
+                    if ($rr->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $bytes = explode('/', $rr->getProperty('bytes') ?: '0/0');
+                    $rate  = explode('/', $rr->getProperty('rate')  ?: '0/0');
+                    $queue = [
+                        'rateIn'   => (int)($rate[0]  ?? 0),
+                        'rateOut'  => (int)($rate[1]  ?? 0),
+                        'bytesIn'  => (int)($bytes[0] ?? 0),
+                        'bytesOut' => (int)($bytes[1] ?? 0),
+                    ];
+                }
+            } catch (Throwable $e) {}
+
+            // 5) Recent logs mentioning this username
+            try {
+                $req = new RouterOS\Request('/log/print');
+                $req->setArgument('.proplist', 'time,topics,message');
+                $count = 0;
+                foreach ($client->sendSync($req) as $rr) {
+                    if ($rr->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $m = (string)$rr->getProperty('message');
+                    if (stripos($m, $c['username']) === false) continue;
+                    $logs[] = ['time'=>$rr->getProperty('time'),'topics'=>$rr->getProperty('topics'),'message'=>$m];
+                    if (++$count >= 30) break;
+                }
+            } catch (Throwable $e) {}
+
+            // 6) Pattern detection
+            $authFails = 0; $disconnects = 0;
+            foreach ($logs as $l) {
+                $m = $l['message'];
+                if (preg_match('/auth(entication)? failed|wrong password|invalid user/i', $m)) $authFails++;
+                if (preg_match('/disconnect(ed)?|terminat|timeout|hangup|lcp.*down/i', $m)) $disconnects++;
+            }
+            if ($authFails > 0) {
+                $checks[] = ['name'=>'Authentication','status'=>'warn',
+                    'msg'=>"$authFails recent auth failure(s)",
+                    'detail'=>"Customer's router probably has the wrong PPP password. Open Edit → Show password to share/reset."];
+            }
+            if ($disconnects > 3) {
+                $checks[] = ['name'=>'Stability','status'=>'warn',
+                    'msg'=>"$disconnects recent disconnects",
+                    'detail'=>'Frequent disconnects usually point to physical-layer issues (optical signal, cable, ONU power). See checklist below.'];
+            }
+        } catch (Throwable $e) {
+            $checks[] = ['name'=>'Router','status'=>'bad','msg'=>'Cannot reach Mikrotik','detail'=>$e->getMessage()];
+        }
+
+        $ui->assign('c', $c);
+        $ui->assign('r', $r);
+        $ui->assign('checks', $checks);
+        $ui->assign('active', $active);
+        $ui->assign('secret', $secret);
+        $ui->assign('queue', $queue);
+        $ui->assign('logs', $logs);
+        $ui->display('customers-diagnose.tpl');
+        break;
+
     case 'graph':
         // Per-customer bandwidth graph (historical from DB + live polling)
         $id = (int) $routes['2'];
