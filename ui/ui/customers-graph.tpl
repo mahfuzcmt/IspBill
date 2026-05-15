@@ -37,7 +37,11 @@
 
                 <div style="height:380px; position:relative;">
                     <canvas id="g-chart"></canvas>
+                    <div id="g-empty" style="position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:#94a3b8; font-style:italic;">
+                        No data for the selected range yet — the poller runs every minute, so come back in a minute or two.
+                    </div>
                 </div>
+                <pre id="g-debug" style="display:none; background:#fff3cd; border:1px solid #ffc107; padding:8px; margin-top:10px; font-size:12px; color:#856404;"></pre>
 
                 <hr>
 
@@ -78,9 +82,32 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+<div id="g-libstatus" style="display:none; background:#f8d7da; color:#721c24; padding:10px; margin:10px 0; border:1px solid #f5c6cb; font-family:monospace; font-size:13px;"></div>
+<script>
+{literal}
+// Visible report on whether each library actually loaded.
+window.__libs = {chart:false, luxon:false, adapter:false};
+function __libNote(name, ok, err) {
+    window.__libs[name] = ok;
+    if (!ok) {
+        var box = document.getElementById('g-libstatus');
+        if (box) {
+            box.style.display = 'block';
+            box.textContent += '⚠ ' + name + ' failed to load: ' + (err || '') + '\n';
+        }
+    }
+}
+{/literal}
+</script>
+<script src="ui/ui/scripts/vendor/chart.umd.min.js"
+        onload="__libNote('chart.js', typeof Chart !== 'undefined')"
+        onerror="__libNote('chart.js', false, 'local file missing')"></script>
+<script src="ui/ui/scripts/vendor/luxon.min.js"
+        onload="__libNote('luxon', typeof luxon !== 'undefined')"
+        onerror="__libNote('luxon', false, 'local file missing')"></script>
+<script src="ui/ui/scripts/vendor/chartjs-adapter-luxon.umd.min.js"
+        onload="__libNote('adapter', true)"
+        onerror="__libNote('adapter', false, 'local file missing')"></script>
 <script>
 var GRAPH_USER = '{$c.username|escape:"javascript"}';
 var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER);
@@ -179,21 +206,61 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
     }
 
     var inFlight = false;
+    function showDebug(msg) {
+        var d = document.getElementById('g-debug');
+        if (d) { d.style.display = 'block'; d.textContent = msg; }
+    }
+    function showEmpty(show) {
+        var e = document.getElementById('g-empty');
+        if (e) e.style.display = show ? 'flex' : 'none';
+    }
+    var inFlight = false;
     function fetchAndRender() {
-        if (inFlight) { return; }     // skip overlap; the next tick will cover it
+        if (typeof Chart === 'undefined') {
+            setStatus('⚠ Chart.js failed to load (CDN blocked?)', 'text-danger');
+            showDebug('Chart.js library is not loaded. Check the browser console for blocked CDN requests.\nURL: https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
+            return;
+        }
+        if (inFlight) { return; }
         inFlight = true;
         var url = GRAPH_URL + '?minutes=' + rangeMinutes;
         fetch(url, { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                var ct = r.headers.get('content-type') || '';
+                if (!r.ok || ct.indexOf('application/json') < 0) {
+                    throw new Error('Session expired — please reload the page and log in again.');
+                }
+                return r.json();
+            })
             .then(function (data) {
-                if (data.error) { setStatus('⚠ ' + data.error, 'text-danger'); return; }
+                if (data.error) {
+                    setStatus('⚠ ' + data.error, 'text-danger');
+                    showDebug('Server-side error: ' + data.error);
+                    return;
+                }
                 var samples = (data.samples || []).slice();
                 if (data.live) samples.push(data.live);
-                buildChart(samples);
+                if (samples.length === 0) {
+                    showEmpty(true);
+                    setStatus('● live (no data yet)', 'text-warning');
+                } else {
+                    showEmpty(false);
+                    try {
+                        buildChart(samples);
+                    } catch (err) {
+                        setStatus('⚠ Chart build error: ' + err.message, 'text-danger');
+                        showDebug('Chart build error: ' + err.message + '\n\nStack:\n' + (err.stack || ''));
+                        return;
+                    }
+                    setStatus('● live  ' + new Date().toLocaleTimeString() +
+                              '  (' + samples.length + ' samples)', 'text-success');
+                }
                 updateLive(data.live);
-                setStatus('● live  ' + new Date().toLocaleTimeString(), 'text-success');
             })
-            .catch(function (e) { setStatus('⚠ ' + e.message, 'text-danger'); })
+            .catch(function (e) {
+                setStatus('⚠ ' + e.message, 'text-danger');
+                showDebug('Fetch error: ' + e.message);
+            })
             .finally(function () {
                 inFlight = false;
                 setTimeout(fetchAndRender, LIVE_POLL_MS);

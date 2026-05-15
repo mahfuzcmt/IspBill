@@ -186,62 +186,82 @@ switch ($action) {
         break;
 
     case 'edit':
-        $id  = $routes['2'];
+        $id  = (int) $routes['2'];
         run_hook('edit_customer'); #HOOK
         $d = ORM::for_table('tbl_customers')->find_one($id);
-        if ($d) {
-            $ui->assign('d', $d);
-            $ui->display('customers-edit.tpl');
-        } else {
-            r2(U . 'customers/list', 'e', $_L['Account_Not_Found']);
-        }
+        if (!$d) { r2(U . 'customers/list', 'e', $_L['Account_Not_Found']); }
+        $r = ORM::for_table('tbl_user_recharges')
+                ->where('customer_id', $id)->order_by_desc('id')->find_one();
+        $plans   = ORM::for_table('tbl_plans')->where('enabled', 1)->order_by_asc('name_plan')->find_many();
+        $routers = ORM::for_table('tbl_routers')->where('enabled', 1)->find_many();
+        $ui->assign('d', $d);
+        $ui->assign('r', $r);
+        $ui->assign('plans', $plans);
+        $ui->assign('routers', $routers);
+        $ui->display('customers-edit.tpl');
         break;
 
     case 'delete':
-        $id  = $routes['2'];
+        $id  = (int) $routes['2'];
         run_hook('delete_customer'); #HOOK
         $d = ORM::for_table('tbl_customers')->find_one($id);
-        if ($d) {
-            $c = ORM::for_table('tbl_user_recharges')->where('username', $d['username'])->find_one();
-            if ($c) {
-                $mikrotik = Mikrotik::info($c['routers']);
-                if ($c['type'] == 'Hotspot') {
-                    if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::removeHotspotUser($client,$c['username']);
-                        Mikrotik::removeHotspotActiveUser($client,$user['username']);
+        if (!$d) { r2(U . 'customers/list', 'e', $_L['Account_Not_Found']); }
+
+        // Best-effort: try to remove the user from the router. Never let a
+        // Mikrotik failure block the DB deletion. The original code:
+        //   - hard-coded Mikrotik::info($c['routers']) which fails when the
+        //     routers field stores an ID (legacy) instead of a name
+        //   - used $user['username'] which was always undefined
+        //   - called Mikrotik::getClient (which die()s) without a try/catch
+        // All three are corrected here.
+        $routerWarning = '';
+        $recharges = ORM::for_table('tbl_user_recharges')
+            ->where('customer_id', $id)
+            ->find_many();
+        if (empty($recharges)) {
+            // Fall back to username match for legacy rows
+            $recharges = ORM::for_table('tbl_user_recharges')
+                ->where('username', $d['username'])
+                ->find_many();
+        }
+
+        if (!empty($recharges) && empty($config['radius_mode'])) {
+            // Pick a router from the most recent recharge
+            $latest = $recharges[0];
+            foreach ($recharges as $rr) {
+                if ($rr['id'] > $latest['id']) $latest = $rr;
+            }
+            $mikrotik = ORM::for_table('tbl_routers')
+                ->where('name', $latest['routers'])->find_one();
+            if (!$mikrotik && is_numeric($latest['routers'])) {
+                $mikrotik = ORM::for_table('tbl_routers')->find_one((int) $latest['routers']);
+            }
+            if (!$mikrotik) {
+                $mikrotik = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+            }
+            if ($mikrotik) {
+                try {
+                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    if ($latest['type'] === 'Hotspot') {
+                        try { Mikrotik::removeHotspotUser($client, $d['username']); } catch (Throwable $e) {}
+                        try { Mikrotik::removeHotspotActiveUser($client, $d['username']); } catch (Throwable $e) {}
+                    } else {
+                        try { Mikrotik::removePpoeUser($client, $d['username']); } catch (Throwable $e) {}
+                        try { Mikrotik::removePpoeActive($client, $d['username']); } catch (Throwable $e) {}
                     }
-                } else {
-                    if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::removePpoeUser($client,$c['username']);
-                        Mikrotik::removePpoeActive($client,$user['username']);
-                    }
-                }
-                try {
-                    $d->delete();
-                } catch (Exception $e) {
-                } catch(Throwable $e){
-                }
-                try {
-                    $c->delete();
-                } catch (Exception $e) {
-                }
-            } else {
-                try {
-                    $d->delete();
-                } catch (Exception $e) {
-                } catch(Throwable $e){
-                }
-                try {
-                    $c->delete();
-                } catch (Exception $e) {
-                } catch(Throwable $e){
+                } catch (Throwable $e) {
+                    $routerWarning = ' (router push skipped: ' . $e->getMessage() . ')';
                 }
             }
-
-            r2(U . 'customers/list', 's', $_L['User_Delete_Ok']);
         }
+
+        // Delete recharges, then the customer
+        foreach ($recharges as $rr) {
+            try { $rr->delete(); } catch (Throwable $e) {}
+        }
+        try { $d->delete(); } catch (Throwable $e) {}
+
+        r2(U . 'customers/list', 's', $_L['User_Delete_Ok'] . $routerWarning);
         break;
 
     case 'add-post':
@@ -355,87 +375,156 @@ switch ($action) {
         break;
 
     case 'edit-post':
-        $username = _post('username');
-        $fullname = _post('fullname');
-        $password = _post('password');
-        $cpassword = _post('cpassword');
-        $address = _post('address');
-        $phonenumber = _post('phonenumber');
+        $id           = (int) _post('id');
+        $username     = trim((string) _post('username'));
+        $fullname     = trim((string) _post('fullname'));
+        $password     = (string) _post('password');         // blank = keep existing
+        $cpassword    = (string) _post('cpassword');
+        $address      = (string) _post('address');
+        $phonenumber  = trim((string) _post('phonenumber'));
+        $email        = trim((string) _post('email'));
+        $planId       = (int) _post('plan_id');
+        $newExp       = trim((string) _post('expiration'));
+        $newStatus    = _post('status') === 'on' ? 'on' : 'off';
+        $pushToRouter = _post('push_to_router') ? true : false;
         run_hook('edit_customer'); #HOOK
-        $msg = '';
-        if (Validator::Length($username, 16, 2) == false) {
-            $msg .= 'Username should be between 3 to 15 characters' . '<br>';
-        }
-        if (Validator::Length($fullname, 26, 2) == false) {
-            $msg .= 'Full Name should be between 3 to 25 characters' . '<br>';
-        }
-        if ($password != '') {
-            if (!Validator::Length($password, 15, 2)) {
-                $msg .= 'Password should be between 3 to 15 characters' . '<br>';
-            }
-            if ($password != $cpassword) {
-                $msg .= 'Passwords does not match' . '<br>';
-            }
-        }
 
-        $id = _post('id');
         $d = ORM::for_table('tbl_customers')->find_one($id);
-        if (!$d) {
-            $msg .= $_L['Data_Not_Found'] . '<br>';
-        }
+        if (!$d) { r2(U . 'customers/list', 'e', $_L['Account_Not_Found']); }
 
-        if ($d['username'] != $username) {
-            $c = ORM::for_table('tbl_customers')->where('username', $username)->find_one();
-            if ($c) {
-                $msg .= $_L['account_already_exist'] . '<br>';
+        // Validation
+        $msg = '';
+        if (Validator::Length($username, 65, 2) == false) $msg .= 'Username should be 3 to 64 characters<br>';
+        if (Validator::Length($fullname, 65, 2) == false) $msg .= 'Full Name should be 3 to 64 characters<br>';
+        if ($password !== '') {
+            if (!Validator::Length($password, 35, 2)) $msg .= 'Password should be 3 to 35 characters<br>';
+            if ($password !== $cpassword)             $msg .= 'Passwords do not match<br>';
+        }
+        // Username uniqueness (if changed)
+        if ($d['username'] !== $username) {
+            $exists = ORM::for_table('tbl_customers')->where('username', $username)->find_one();
+            if ($exists) $msg .= $_L['account_already_exist'] . '<br>';
+        }
+        if ($newExp !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $newExp)) {
+            $msg .= 'Invalid expiration date<br>';
+        }
+        if ($msg !== '') { r2(U . 'customers/edit/' . $id, 'e', $msg); }
+
+        // ---- Capture old state for diff against router ----
+        $oldUsername = $d['username'];
+        $oldPassword = $d['password'];
+        $r = ORM::for_table('tbl_user_recharges')
+                ->where('customer_id', $id)->order_by_desc('id')->find_one();
+        $oldPlanName = $r ? $r['namebp']     : '';
+        $oldStatus   = $r ? $r['status']     : 'off';
+        $oldExp      = $r ? $r['expiration'] : '';
+        $oldType     = $r ? $r['type']       : 'PPPoE';
+
+        // ---- Update customer row ----
+        $d->username    = $username;
+        if ($password !== '') $d->password = $password;
+        $d->fullname    = $fullname;
+        $d->address     = $address;
+        $d->phonenumber = $phonenumber;
+        if ($email !== '') $d->email = $email;
+        $d->save();
+
+        // ---- Resolve plan + router (if a plan was selected) ----
+        $plan = $planId > 0 ? ORM::for_table('tbl_plans')->find_one($planId) : null;
+        $service = $plan ? ($plan['type'] === 'Hotspot' ? 'Hotspot' : 'PPPoE') : $oldType;
+        $mikrotik = null;
+        if ($plan) {
+            $rtField  = $plan['routers'];
+            $mikrotik = ORM::for_table('tbl_routers')->where('name', $rtField)->find_one();
+            if (!$mikrotik && is_numeric($rtField)) {
+                $mikrotik = ORM::for_table('tbl_routers')->find_one((int) $rtField);
             }
         }
+        if (!$mikrotik && $r) {
+            $mikrotik = ORM::for_table('tbl_routers')->where('name', $r['routers'])->find_one();
+        }
+        if (!$mikrotik) {
+            $mikrotik = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+        }
 
-        if ($msg == '') {
-            $c = ORM::for_table('tbl_user_recharges')->where('username', $username)->find_one();
-            if ($c) {
-                $mikrotik = Mikrotik::info($c['routers']);
-                if ($c['type'] == 'Hotspot') {
-                    if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::setHotspotUser($client,$c['username'],$password);
-                        Mikrotik::removeHotspotActiveUser($client,$user['username']);
-                    }
-
-                    $d->password = $password;
-                    $d->save();
-                } else {
-                    if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::setPpoeUser($client,$c['username'],$password);
-                        Mikrotik::removePpoeActive($client,$user['username']);
-                    }
-
-                    $d->password = $password;
-                    $d->save();
-                }
-                $d->username = $username;
-                if ($password != '') {
-                    $d->password = $password;
-                }
-                $d->fullname = $fullname;
-                $d->address = $address;
-                $d->phonenumber = $phonenumber;
-                $d->save();
+        // ---- Update recharge row if a plan is in play ----
+        if ($plan) {
+            if ($newExp === '') $newExp = $oldExp ?: date('Y-m-d', strtotime('+30 days'));
+            if ($r) {
+                $r->plan_id    = $plan['id'];
+                $r->namebp     = $plan['name_plan'];
+                $r->expiration = $newExp;
+                $r->status     = $newStatus;
+                $r->type       = $service;
+                $r->routers    = $mikrotik ? $mikrotik['name'] : '';
+                $r->save();
             } else {
-                $d->username = $username;
-                if ($password != '') {
-                    $d->password = $password;
-                }
-                $d->fullname = $fullname;
-                $d->address = $address;
-                $d->phonenumber = $phonenumber;
-                $d->save();
+                $rr = ORM::for_table('tbl_user_recharges')->create();
+                $rr->customer_id  = $id;
+                $rr->username     = $username;
+                $rr->plan_id      = $plan['id'];
+                $rr->namebp       = $plan['name_plan'];
+                $rr->recharged_on = date('Y-m-d');
+                $rr->expiration   = $newExp;
+                $rr->time         = date('H:i:s');
+                $rr->status       = $newStatus;
+                $rr->method       = 'admin';
+                $rr->routers      = $mikrotik ? $mikrotik['name'] : '';
+                $rr->type         = $service;
+                $rr->save();
             }
-            r2(U . 'customers/list', 's', 'User Updated Successfully');
-        } else {
-            r2(U . 'customers/edit/' . $id, 'e', $msg);
         }
+
+        // ---- Push changes to Mikrotik (best-effort, individual try/catch) ----
+        $routerWarning = '';
+        if ($pushToRouter && $mikrotik && empty($config['radius_mode']) && $service === 'PPPoE') {
+            try {
+                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+
+                // Username changed → recreate the secret with the new name
+                if ($oldUsername !== $username) {
+                    try { Mikrotik::removePpoeUser($client, $oldUsername); } catch (Throwable $e) {}
+                    if ($plan) {
+                        try {
+                            Mikrotik::addPpoeUser($client, $plan, ['username' => $username, 'password' => $password ?: $oldPassword]);
+                        } catch (Throwable $e) { $routerWarning .= ' (rename push: ' . $e->getMessage() . ')'; }
+                    }
+                } else {
+                    // Password changed → setPpoeUser
+                    if ($password !== '' && $password !== $oldPassword) {
+                        try {
+                            Mikrotik::setPpoeUser($client, ['username' => $username], $password);
+                        } catch (Throwable $e) { $routerWarning .= ' (password push: ' . $e->getMessage() . ')'; }
+                    }
+                    // Plan changed → swap profile
+                    if ($plan && $oldPlanName !== $plan['name_plan']) {
+                        try {
+                            Mikrotik::setPpoeUserProfile($client, $username, $plan['name_plan']);
+                        } catch (Throwable $e) { $routerWarning .= ' (plan push: ' . $e->getMessage() . ')'; }
+                    }
+                    // Status changed
+                    if ($oldStatus !== $newStatus) {
+                        try {
+                            if ($newStatus === 'on') {
+                                Mikrotik::enablePpoeUser($client, $username);
+                            } else {
+                                Mikrotik::disablePpoeUser($client, $username);
+                                try { Mikrotik::removePpoeActive($client, $username); } catch (Throwable $e) {}
+                            }
+                        } catch (Throwable $e) { $routerWarning .= ' (status push: ' . $e->getMessage() . ')'; }
+                    }
+                }
+            } catch (Throwable $e) {
+                $routerWarning = ' (router connection failed: ' . $e->getMessage() . ')';
+            }
+        }
+
+        _log("$oldUsername edited by " . ($admin['username'] ?? '?') .
+            ($oldUsername !== $username ? " → $username" : '') .
+            ($plan ? "; plan=$oldPlanName→{$plan['name_plan']}" : '') .
+            "; status=$oldStatus→$newStatus; exp=$oldExp→$newExp", 'User', $id);
+
+        r2(U . 'customers/list', 's', 'Customer updated' . $routerWarning);
         break;
 
     case 'graph':

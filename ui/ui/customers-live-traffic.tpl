@@ -125,7 +125,14 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
 
     function poll() {
         fetch(LIVE_TRAFFIC_URL, { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                var ct = r.headers.get('content-type') || '';
+                if (!r.ok || ct.indexOf('application/json') < 0) {
+                    // The fetch likely got redirected to the login page (session expired).
+                    throw new Error('Session expired — please reload the page and log in again.');
+                }
+                return r.json();
+            })
             .then(render)
             .catch(function (e) {
                 var s = document.getElementById('lt-status');
