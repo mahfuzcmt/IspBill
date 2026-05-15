@@ -28,15 +28,45 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="col-md-3 control-label">{$_L['Password']}</label>
+                        <label class="col-md-3 control-label">Current Password</label>
                         <div class="col-md-6">
-                            <input type="password" class="form-control" name="password" autocomplete="new-password">
-                            <span class="help-block">Leave blank to keep the existing password. Changes are pushed to the Mikrotik secret.</span>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="current-password"
+                                       value="{$d['password']|escape:'html'}" readonly>
+                                <span class="input-group-btn">
+                                    <button type="button" class="btn btn-default" onclick="
+                                        var el = document.getElementById('current-password');
+                                        el.type = el.type === 'password' ? 'text' : 'password';
+                                        this.innerHTML = el.type === 'password' ? '<i class=&quot;fa fa-eye&quot;></i> Show' : '<i class=&quot;fa fa-eye-slash&quot;></i> Hide';
+                                    "><i class="fa fa-eye"></i> Show</button>
+                                    <button type="button" class="btn btn-default" onclick="
+                                        var el = document.getElementById('current-password');
+                                        var t = el.type; el.type = 'text';
+                                        el.select(); document.execCommand('copy'); el.type = t;
+                                        this.innerHTML = '<i class=&quot;fa fa-check&quot;></i> Copied';
+                                        setTimeout(function(b){ b.innerHTML = '<i class=&quot;fa fa-copy&quot;></i> Copy'; }.bind(null, this), 1500);
+                                    "><i class="fa fa-copy"></i> Copy</button>
+                                </span>
+                            </div>
+                            <span class="help-block">
+                                This is the PPP/Hotspot login password the customer uses on their router.
+                                If they call asking to recover it, click <strong>Show</strong> or <strong>Copy</strong>.
+                                To change it, use the New Password field below.
+                            </span>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label class="col-md-3 control-label">{$_L['Confirm_Password']}</label>
+                        <label class="col-md-3 control-label">New Password</label>
+                        <div class="col-md-6">
+                            <input type="password" class="form-control" name="password" autocomplete="new-password"
+                                   placeholder="Leave blank to keep the current password">
+                            <span class="help-block">If set, this overwrites the Mikrotik PPP secret password.</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="col-md-3 control-label">Confirm New Password</label>
                         <div class="col-md-6">
                             <input type="password" class="form-control" name="cpassword" autocomplete="new-password">
                         </div>

@@ -17,7 +17,7 @@
 <body class="hold-transition login-page">
     <div class="login-box">
         <div class="login-logo">
-            <b>Nux</b>Billing
+            <b>Net</b>Pulse
         </div>
         <div class="login-box-body">
             <p class="login-box-msg">{$_L['Sign_In_Admin']}</p>
