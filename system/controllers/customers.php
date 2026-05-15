@@ -364,6 +364,84 @@ switch ($action) {
         }
         break;
 
+    case 'graph':
+        // Per-customer bandwidth graph (historical from DB + live polling)
+        $id = (int) $routes['2'];
+        $c  = ORM::for_table('tbl_customers')->find_one($id);
+        if (!$c) { r2(U . 'customers/list', 'e', $_L['Account_Not_Found']); }
+        $r = ORM::for_table('tbl_user_recharges')
+                ->where('customer_id', $id)->order_by_desc('id')->find_one();
+        $ui->assign('c', $c);
+        $ui->assign('r', $r);
+        $ui->display('customers-graph.tpl');
+        break;
+
+    case 'graph-data':
+        // JSON: historical samples from DB for one user + current snapshot.
+        // URL: customers/graph-data/<username>?minutes=60
+        header('Content-Type: application/json');
+        $username = isset($routes['2']) ? $routes['2'] : '';
+        $minutes  = isset($_GET['minutes']) ? max(5, min(10080, (int) $_GET['minutes'])) : 60;
+        $out = ['username' => $username, 'minutes' => $minutes, 'samples' => [], 'live' => null, 'error' => null];
+        if ($username === '') { $out['error'] = 'username required'; echo json_encode($out); exit; }
+
+        try {
+            // Historical from DB
+            $stmt = ORM::for_table('tbl_traffic_samples')
+                ->raw_query(
+                    "SELECT UNIX_TIMESTAMP(ts) AS t, rate_in, rate_out, bytes_in, bytes_out
+                     FROM tbl_traffic_samples
+                     WHERE username = ? AND ts >= NOW() - INTERVAL ? MINUTE
+                     ORDER BY ts ASC",
+                    [$username, $minutes]
+                )->find_array();
+            foreach ($stmt as $row) {
+                $out['samples'][] = [
+                    'ts'        => (int) $row['t'] * 1000,   // ms for JS
+                    'rateIn'    => (int) $row['rate_in'],
+                    'rateOut'   => (int) $row['rate_out'],
+                    'bytesIn'   => (int) $row['bytes_in'],
+                    'bytesOut'  => (int) $row['bytes_out'],
+                ];
+            }
+
+            // Live snapshot from Mikrotik (gives < 1 min freshness for active sessions)
+            $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+            if ($rt) {
+                $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
+                $req = new RouterOS\Request('/queue/simple/print');
+                $req->setArgument('stats', 'yes');
+                $req->setArgument('.proplist', 'name,bytes,rate');
+                $req->setQuery(RouterOS\Query::where('name', '<pppoe-' . $username . '>'));
+                foreach ($client->sendSync($req) as $r) {
+                    if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
+                    $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
+                    $out['live'] = [
+                        'ts'       => time() * 1000,
+                        'rateIn'   => (int) ($rate[0]  ?? 0),
+                        'rateOut'  => (int) ($rate[1]  ?? 0),
+                        'bytesIn'  => (int) ($bytes[0] ?? 0),
+                        'bytesOut' => (int) ($bytes[1] ?? 0),
+                    ];
+                }
+                // Active session details
+                $req = new RouterOS\Request('/ppp/active/print');
+                $req->setQuery(RouterOS\Query::where('name', $username));
+                foreach ($client->sendSync($req) as $r) {
+                    if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    if (!$out['live']) $out['live'] = ['ts' => time() * 1000, 'rateIn'=>0,'rateOut'=>0,'bytesIn'=>0,'bytesOut'=>0];
+                    $out['live']['address'] = $r->getProperty('address');
+                    $out['live']['uptime']  = $r->getProperty('uptime');
+                    $out['live']['callerId']= $r->getProperty('caller-id');
+                }
+            }
+        } catch (Throwable $e) {
+            $out['error'] = $e->getMessage();
+        }
+        echo json_encode($out);
+        exit;
+
     case 'live-traffic':
         // Live bandwidth monitor page. Auto-refreshes via JS calling live-traffic-data.
         try {

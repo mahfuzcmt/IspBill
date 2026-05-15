@@ -92,6 +92,7 @@
                                                     <td align="center">
                                                         <a href="{$_url}prepaid/recharge-user/{$ds['id']}" id="{$ds['id']}" class="btn btn-primary btn-sm">{$_L['Recharge']}</a>
                                                         <a href="{$_url}customers/billing/{$ds['id']}" class="btn btn-info btn-sm" title="Edit billing / migrate plan / set status">Billing</a>
+                                                        <a href="{$_url}customers/graph/{$ds['id']}" class="btn btn-success btn-sm" title="Live + historical bandwidth graph"><i class="fa fa-line-chart"></i> Graph</a>
                                                     </td>
                                                     <td align="center">
                                                         <a href="{$_url}customers/edit/{$ds['id']}" class="btn btn-warning btn-sm">{$_L['Edit']}</a>
