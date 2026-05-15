@@ -22,6 +22,7 @@
 										<div class="col-md-4">
 											<a href="{$_url}customers/add" class="btn btn-primary btn-block waves-effect"><i class="ion ion-android-add"> </i> {$_L['Add_Contact']}</a>
 												<a href="{$_url}customers/live-traffic" class="btn btn-success btn-block" style="margin-top:6px"><i class="fa fa-tachometer"></i> Live Traffic Monitor</a>
+												<a href="{$_url}wan" class="btn btn-info btn-block" style="margin-top:6px"><i class="fa fa-globe"></i> WAN Dashboard</a>
 												{if $routerWebUrl}<a href="{$routerWebUrl}" target="_blank" rel="noopener" class="btn btn-default btn-block" style="margin-top:6px"><i class="fa fa-external-link"></i> Open Router Web UI</a>{/if}
 												{if isset($routerReachable)}{if $routerReachable}<small class="text-success">● Router status: live</small>{else}<small class="text-danger">● Router unreachable — status from DB</small>{/if}{/if}
 										</div>&nbsp;

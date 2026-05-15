@@ -721,6 +721,36 @@ switch ($action) {
                     'msg'=>"$disconnects recent disconnects",
                     'detail'=>'Frequent disconnects usually point to physical-layer issues (optical signal, cable, ONU power). See checklist below.'];
             }
+
+            // 7) Recent interface errors from tbl_traffic_samples (last hour delta).
+            //    Growing rx-error / rx-drop count on the <pppoe-USER> interface is
+            //    a strong hint of optical-layer issues.
+            try {
+                $stmt = ORM::for_table('tbl_traffic_samples')->raw_query(
+                    "SELECT MAX(rx_error)-MIN(rx_error) AS d_rx_err,
+                            MAX(tx_error)-MIN(tx_error) AS d_tx_err,
+                            MAX(rx_drop) -MIN(rx_drop)  AS d_rx_drop,
+                            MAX(tx_drop) -MIN(tx_drop)  AS d_tx_drop,
+                            COUNT(*) AS n
+                       FROM tbl_traffic_samples
+                      WHERE username = ? AND ts >= NOW() - INTERVAL 60 MINUTE",
+                    [$c['username']]
+                )->find_array();
+                if (!empty($stmt) && (int)$stmt[0]['n'] > 1) {
+                    $rxErr = (int)$stmt[0]['d_rx_err'];
+                    $txErr = (int)$stmt[0]['d_tx_err'];
+                    $rxDrp = (int)$stmt[0]['d_rx_drop'];
+                    $txDrp = (int)$stmt[0]['d_tx_drop'];
+                    if ($rxErr + $txErr + $rxDrp + $txDrp > 0) {
+                        $checks[] = ['name'=>'Interface errors (1h)','status'=>'warn',
+                            'msg'=>"rx-err=$rxErr  tx-err=$txErr  rx-drop=$rxDrp  tx-drop=$txDrp",
+                            'detail'=>'Errors / drops on the PPP interface in the last hour. Likely optical / fiber / ONU issue. Check the physical checklist below.'];
+                    } else {
+                        $checks[] = ['name'=>'Interface errors (1h)','status'=>'ok',
+                            'msg'=>'No interface errors / drops'];
+                    }
+                }
+            } catch (Throwable $e) { /* tbl_traffic_samples missing columns on first deploy */ }
         } catch (Throwable $e) {
             $checks[] = ['name'=>'Router','status'=>'bad','msg'=>'Cannot reach Mikrotik','detail'=>$e->getMessage()];
         }
