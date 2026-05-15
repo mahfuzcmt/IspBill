@@ -495,30 +495,105 @@ switch ($action) {
         }
         if ($msg == '') {
             run_hook('create_voucher'); #HOOK
-            for ($i = 0; $i < $numbervoucher; $i++) {
-                $code = strtoupper(substr(md5(time() . rand(10000, 99999)), 0, $lengthcode));
-                //TODO: IMPLEMENT Voucher Generator
-                $d = ORM::for_table('tbl_voucher')->create();
-                $d->type = $type;
-                $d->routers = $server;
-                $d->id_plan = $plan;
-                $d->code = $code;
-                $d->user = '0';
-                $d->status = '0';
-                $d->save();
+
+            // Look up plan + router for the Mikrotik push
+            $planObj = ORM::for_table('tbl_plans')->find_one($plan);
+            $mikrotik = ORM::for_table('tbl_routers')->where('name', $server)->find_one();
+            if (!$mikrotik && is_numeric($server)) {
+                $mikrotik = ORM::for_table('tbl_routers')->find_one((int) $server);
             }
 
-            r2(U . 'prepaid/voucher', 's', $_L['Voucher_Successfully']);
+            // Open a single Mikrotik connection for the whole batch
+            $client = null;
+            $pushErrors = [];
+            if ($planObj && $mikrotik && empty($config['radius_mode'])) {
+                try {
+                    $client = Mikrotik::getClient(
+                        $mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']
+                    );
+                } catch (Throwable $e) {
+                    $pushErrors[] = 'Connect: ' . $e->getMessage();
+                }
+            }
+
+            $generated = 0;
+            $pushed = 0;
+            $existingCodes = []; // local de-dupe within batch
+            for ($i = 0; $i < $numbervoucher; $i++) {
+                // Better seed: include the loop index + microseconds to avoid same-second collisions
+                $tries = 0;
+                do {
+                    $code = strtoupper(substr(
+                        md5(microtime(true) . rand(0, PHP_INT_MAX) . $i),
+                        0, max(4, $lengthcode)
+                    ));
+                    $tries++;
+                } while (
+                    (isset($existingCodes[$code]) ||
+                     ORM::for_table('tbl_voucher')->where('code', $code)->find_one())
+                    && $tries < 10
+                );
+                $existingCodes[$code] = true;
+
+                $d = ORM::for_table('tbl_voucher')->create();
+                $d->type    = $type;
+                $d->routers = $server;
+                $d->id_plan = $plan;
+                $d->code    = $code;
+                $d->user    = '0';
+                $d->status  = '0';
+                $d->save();
+                $generated++;
+
+                // Push to Mikrotik as hotspot user (username = password = code)
+                if ($client && $planObj && $type === 'Hotspot') {
+                    try {
+                        Mikrotik::addHotspotUser($client, $planObj, [
+                            'username' => $code,
+                            'password' => $code,
+                        ]);
+                        $pushed++;
+                    } catch (Throwable $e) {
+                        $pushErrors[] = $code . ': ' . $e->getMessage();
+                    }
+                }
+            }
+
+            $msg = "Generated $generated voucher(s)";
+            if ($type === 'Hotspot') {
+                $msg .= "; pushed $pushed to Mikrotik";
+                if (!empty($pushErrors)) {
+                    $msg .= ' (' . count($pushErrors) . ' push failures: '
+                         . implode(' | ', array_slice($pushErrors, 0, 3)) . ')';
+                }
+            }
+            r2(U . 'prepaid/voucher', 's', $msg);
         } else {
             r2(U . 'prepaid/add-voucher/' . $id, 'e', $msg);
         }
         break;
 
     case 'voucher-delete':
-        $id  = $routes['2'];
+        $id  = (int) $routes['2'];
         run_hook('delete_voucher'); #HOOK
         $d = ORM::for_table('tbl_voucher')->find_one($id);
         if ($d) {
+            // Also remove from Mikrotik if it was a hotspot voucher and is unused
+            if ($d['type'] === 'Hotspot' && empty($config['radius_mode'])) {
+                $mikrotik = ORM::for_table('tbl_routers')->where('name', $d['routers'])->find_one();
+                if (!$mikrotik && is_numeric($d['routers'])) {
+                    $mikrotik = ORM::for_table('tbl_routers')->find_one((int) $d['routers']);
+                }
+                if ($mikrotik) {
+                    try {
+                        $client = Mikrotik::getClient(
+                            $mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']
+                        );
+                        try { Mikrotik::removeHotspotUser($client, $d['code']); } catch (Throwable $e) {}
+                        try { Mikrotik::removeHotspotActiveUser($client, $d['code']); } catch (Throwable $e) {}
+                    } catch (Throwable $e) {}
+                }
+            }
             $d->delete();
             r2(U . 'prepaid/voucher', 's', $_L['Delete_Successfully']);
         }

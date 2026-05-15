@@ -5,17 +5,17 @@
 define('APP_URL', 'http://your-domain-or-ip:8081');
 $_app_stage = 'Dev';   // 'Live' suppresses error output
 
-// ─── Database (PHPNuxBill) ───────────────────────────────────────────
-$db_host     = 'localhost';     // for Docker compose: 'nuxbill-db'
-$db_user     = 'phpnuxbill';
+// ─── Database (netpulse) ───────────────────────────────────────────
+$db_host     = 'localhost';     // for Docker compose: 'netpulse-db'
+$db_user     = 'netpulse';
 $db_password = 'CHANGE_ME';
-$db_name     = 'phpnuxbill';
+$db_name     = 'netpulse';
 
 // ─── Database (Radius — same DB unless you split it) ─────────────────
 $radius_host = 'localhost';
-$radius_user = 'phpnuxbill';
+$radius_user = 'netpulse';
 $radius_pass = 'CHANGE_ME';
-$radius_name = 'phpnuxbill';
+$radius_name = 'netpulse';
 
 if ($_app_stage != 'Live') {
     error_reporting(E_ERROR);
