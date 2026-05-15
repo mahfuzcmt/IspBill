@@ -177,6 +177,11 @@ switch ($action) {
 
     case 'add':
         run_hook('view_add_customer'); #HOOK
+        // Provide routers + plans so the form can offer Service / Router / Plan selectors
+        $routers = ORM::for_table('tbl_routers')->where('enabled', 1)->find_many();
+        $plans   = ORM::for_table('tbl_plans')->where('enabled', 1)->order_by_asc('name_plan')->find_many();
+        $ui->assign('routers', $routers);
+        $ui->assign('plans',   $plans);
         $ui->display('customers-add.tpl');
         break;
 
@@ -240,44 +245,113 @@ switch ($action) {
         break;
 
     case 'add-post':
-        $username = _post('username');
-        $fullname = _post('fullname');
-        $password = _post('password');
-        $cpassword = _post('cpassword');
-        $address = _post('address');
-        $phonenumber = _post('phonenumber');
+        $username     = trim((string) _post('username'));
+        $fullname     = trim((string) _post('fullname'));
+        $password     = (string) _post('password');
+        $cpassword    = (string) _post('cpassword');
+        $address      = (string) _post('address');
+        $phonenumber  = trim((string) _post('phonenumber'));
+        $email        = trim((string) _post('email'));
+        $planId       = (int) _post('plan_id');
+        $pushToRouter = _post('push_to_router') ? true : false;
+        $expiration   = trim((string) _post('expiration')); // optional YYYY-MM-DD; default: 30d
         run_hook('add_customer'); #HOOK
+
         $msg = '';
-        if (Validator::Length($username, 35, 2) == false) {
-            $msg .= 'Username should be between 3 to 55 characters' . '<br>';
-        }
-        if (Validator::Length($fullname, 36, 2) == false) {
-            $msg .= 'Full Name should be between 3 to 25 characters' . '<br>';
-        }
-        if (!Validator::Length($password, 35, 2)) {
-            $msg .= 'Password should be between 3 to 35 characters' . '<br>';
-        }
-        if ($password != $cpassword) {
-            $msg .= 'Passwords does not match' . '<br>';
+        if (Validator::Length($username, 35, 2) == false)  $msg .= 'Username should be 3 to 35 characters<br>';
+        if (Validator::Length($fullname, 36, 2) == false)  $msg .= 'Full Name should be 3 to 35 characters<br>';
+        if (!Validator::Length($password, 35, 2))          $msg .= 'Password should be 3 to 35 characters<br>';
+        if ($password !== $cpassword)                      $msg .= 'Passwords do not match<br>';
+        if (ORM::for_table('tbl_customers')->where('username', $username)->find_one())
+                                                           $msg .= $_L['account_already_exist'] . '<br>';
+        $plan = $planId > 0 ? ORM::for_table('tbl_plans')->find_one($planId) : null;
+        if ($planId && !$plan)                             $msg .= 'Selected plan not found<br>';
+
+        if ($msg !== '') { r2(U . 'customers/add', 'e', $msg); }
+
+        // Create customer
+        $d = ORM::for_table('tbl_customers')->create();
+        $d->username    = $username;
+        $d->password    = $password;       // tbl_customers stores plaintext (Password::_uverify)
+        $d->fullname    = $fullname;
+        $d->address     = $address;
+        $d->phonenumber = $phonenumber !== '' ? $phonenumber : $username;
+        $d->email       = $email       !== '' ? $email       : ($username . '@local');
+        $d->save();
+        $customerId = (int) $d->id();
+
+        // If a plan was selected, set up recharge + push to router
+        if ($plan) {
+            $service = $plan['type'] === 'Hotspot' ? 'Hotspot' : 'PPPoE';
+
+            // Resolve router for this plan (handles routers field being ID or name)
+            $rtField  = $plan['routers'];
+            $mikrotik = ORM::for_table('tbl_routers')->where('name', $rtField)->find_one();
+            if (!$mikrotik && is_numeric($rtField)) {
+                $mikrotik = ORM::for_table('tbl_routers')->find_one((int) $rtField);
+            }
+            if (!$mikrotik) {
+                $mikrotik = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+            }
+
+            // Push to Mikrotik
+            if ($pushToRouter && $mikrotik && !$config['radius_mode']) {
+                try {
+                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    $custData = ['username' => $username, 'password' => $password];
+                    if ($service === 'PPPoE') {
+                        Mikrotik::addPpoeUser($client, $plan, $custData);
+                    } else {
+                        Mikrotik::addHotspotUser($client, $plan, $custData);
+                    }
+                } catch (Throwable $e) {
+                    // Don't roll back the DB row — the admin can re-push from the Billing UI.
+                    // Surface the warning via the flash message.
+                    r2(U . 'customers/list', 'e',
+                        'Customer ' . $username . ' created in DB, but router push failed: ' . $e->getMessage());
+                }
+            }
+
+            // Recharge record
+            if (!$expiration || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiration)) {
+                // Default 30 days from now
+                $expiration = date('Y-m-d', strtotime('+30 days'));
+            }
+            $r = ORM::for_table('tbl_user_recharges')->create();
+            $r->customer_id  = $customerId;
+            $r->username     = $username;
+            $r->plan_id      = $plan['id'];
+            $r->namebp       = $plan['name_plan'];
+            $r->recharged_on = date('Y-m-d');
+            $r->expiration   = $expiration;
+            $r->time         = date('H:i:s');
+            $r->status       = 'on';
+            $r->method       = 'admin';
+            $r->routers      = $mikrotik ? $mikrotik['name'] : '';
+            $r->type         = $service;
+            $r->save();
+
+            // Transaction (audit)
+            $t = ORM::for_table('tbl_transactions')->create();
+            $t->invoice       = 'INV-' . _raid(5);
+            $t->username      = $username;
+            $t->plan_name     = $plan['name_plan'];
+            $t->price         = $plan['price'];
+            $t->recharged_on  = date('Y-m-d');
+            $t->expiration    = $expiration;
+            $t->time          = date('H:i:s');
+            $t->method        = 'admin';
+            $t->routers       = $mikrotik ? $mikrotik['name'] : '';
+            $t->type          = $service;
+            $t->save();
+
+            _log("$username created with plan {$plan['name_plan']}, exp $expiration"
+                . ($pushToRouter ? ' (pushed to router)' : ' (DB only)'),
+                'User', $customerId);
         }
 
-        $d = ORM::for_table('tbl_customers')->where('username', $username)->find_one();
-        if ($d) {
-            $msg .= $_L['account_already_exist'] . '<br>';
-        }
-
-        if ($msg == '') {
-            $d = ORM::for_table('tbl_customers')->create();
-            $d->username = $username;
-            $d->password = $password;
-            $d->fullname = $fullname;
-            $d->address = $address;
-            $d->phonenumber = $username;
-            $d->save();
-            r2(U . 'customers/list', 's', $_L['account_created_successfully']);
-        } else {
-            r2(U . 'customers/add', 'e', $msg);
-        }
+        r2(U . 'customers/list', 's',
+            $plan ? "Customer $username created on plan {$plan['name_plan']}" : $_L['account_created_successfully']);
         break;
 
     case 'edit-post':
@@ -405,35 +479,45 @@ switch ($action) {
                 ];
             }
 
-            // Live snapshot from Mikrotik (gives < 1 min freshness for active sessions)
+            // Live snapshot from Mikrotik. Each call is wrapped because PEAR2 throws
+            // "Unrecognized response type" when a query returns no data (e.g. user offline).
             $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
             if ($rt) {
-                $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
-                $req = new RouterOS\Request('/queue/simple/print');
-                $req->setArgument('stats', 'yes');
-                $req->setArgument('.proplist', 'name,bytes,rate');
-                $req->setQuery(RouterOS\Query::where('name', '<pppoe-' . $username . '>'));
-                foreach ($client->sendSync($req) as $r) {
-                    if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                    $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-                    $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
-                    $out['live'] = [
-                        'ts'       => time() * 1000,
-                        'rateIn'   => (int) ($rate[0]  ?? 0),
-                        'rateOut'  => (int) ($rate[1]  ?? 0),
-                        'bytesIn'  => (int) ($bytes[0] ?? 0),
-                        'bytesOut' => (int) ($bytes[1] ?? 0),
-                    ];
-                }
-                // Active session details
-                $req = new RouterOS\Request('/ppp/active/print');
-                $req->setQuery(RouterOS\Query::where('name', $username));
-                foreach ($client->sendSync($req) as $r) {
-                    if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                    if (!$out['live']) $out['live'] = ['ts' => time() * 1000, 'rateIn'=>0,'rateOut'=>0,'bytesIn'=>0,'bytesOut'=>0];
-                    $out['live']['address'] = $r->getProperty('address');
-                    $out['live']['uptime']  = $r->getProperty('uptime');
-                    $out['live']['callerId']= $r->getProperty('caller-id');
+                try {
+                    $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
+
+                    try {
+                        $req = new RouterOS\Request('/queue/simple/print');
+                        $req->setArgument('stats', 'yes');
+                        $req->setArgument('.proplist', 'name,bytes,rate');
+                        $req->setQuery(RouterOS\Query::where('name', '<pppoe-' . $username . '>'));
+                        foreach ($client->sendSync($req) as $r) {
+                            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                            $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
+                            $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
+                            $out['live'] = [
+                                'ts'       => time() * 1000,
+                                'rateIn'   => (int) ($rate[0]  ?? 0),
+                                'rateOut'  => (int) ($rate[1]  ?? 0),
+                                'bytesIn'  => (int) ($bytes[0] ?? 0),
+                                'bytesOut' => (int) ($bytes[1] ?? 0),
+                            ];
+                        }
+                    } catch (Throwable $e) { /* user has no dynamic queue (offline) */ }
+
+                    try {
+                        $req = new RouterOS\Request('/ppp/active/print');
+                        $req->setQuery(RouterOS\Query::where('name', $username));
+                        foreach ($client->sendSync($req) as $r) {
+                            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                            if (!$out['live']) $out['live'] = ['ts' => time() * 1000, 'rateIn'=>0,'rateOut'=>0,'bytesIn'=>0,'bytesOut'=>0];
+                            $out['live']['address']  = $r->getProperty('address');
+                            $out['live']['uptime']   = $r->getProperty('uptime');
+                            $out['live']['callerId'] = $r->getProperty('caller-id');
+                        }
+                    } catch (Throwable $e) { /* user not currently connected */ }
+                } catch (Throwable $e) {
+                    // Router unreachable — keep DB history, just no live snapshot.
                 }
             }
         } catch (Throwable $e) {
@@ -471,52 +555,58 @@ switch ($action) {
                 $custMap[$c['username']] = $c['fullname'];
             }
 
-            // 1. Build queue stats map: username → {rateRx, rateTx, bytesRx, bytesTx}
+            // Each Mikrotik call is wrapped — PEAR2 throws "Unrecognized response type"
+            // when a query returns no data, which would otherwise fail the whole endpoint.
+
+            // 1. Queue stats map (PPPoE dynamic queues)
             $queueByUser = [];
-            $req = new RouterOS\Request('/queue/simple/print');
-            $req->setArgument('stats', 'yes');
-            $req->setArgument('.proplist', 'name,bytes,rate');
-            foreach ($client->sendSync($req) as $r) {
-                if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                $qname = $r->getProperty('name');
-                // Strip "<pppoe-…>" wrapper
-                if (preg_match('/^<pppoe-(.+)>$/', $qname, $m)) {
-                    $user = $m[1];
-                } else {
-                    $user = trim($qname, '<>');
+            try {
+                $req = new RouterOS\Request('/queue/simple/print');
+                $req->setArgument('stats', 'yes');
+                $req->setArgument('.proplist', 'name,bytes,rate');
+                foreach ($client->sendSync($req) as $r) {
+                    if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $qname = $r->getProperty('name');
+                    if (preg_match('/^<pppoe-(.+)>$/', $qname, $m)) {
+                        $user = $m[1];
+                    } else {
+                        $user = trim($qname, '<>');
+                    }
+                    $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
+                    $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
+                    $queueByUser[$user] = [
+                        'bytesRx' => (int) ($bytes[0] ?? 0),
+                        'bytesTx' => (int) ($bytes[1] ?? 0),
+                        'rateRx'  => (int) ($rate[0]  ?? 0),
+                        'rateTx'  => (int) ($rate[1]  ?? 0),
+                    ];
                 }
-                $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-                $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
-                $queueByUser[$user] = [
-                    'bytesRx' => (int) ($bytes[0] ?? 0),
-                    'bytesTx' => (int) ($bytes[1] ?? 0),
-                    'rateRx'  => (int) ($rate[0]  ?? 0),
-                    'rateTx'  => (int) ($rate[1]  ?? 0),
-                ];
-            }
+            } catch (Throwable $e) { /* no dynamic queues — leave queueByUser empty */ }
 
-            // 2. Pull active sessions for IP / uptime / caller-id
-            $req = new RouterOS\Request('/ppp/active/print');
-            $req->setArgument('.proplist', 'name,service,address,uptime,caller-id');
-            foreach ($client->sendSync($req) as $r) {
-                if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                $name = $r->getProperty('name');
-                $q = $queueByUser[$name] ?? ['bytesRx'=>0,'bytesTx'=>0,'rateRx'=>0,'rateTx'=>0];
-                $out['sessions'][] = [
-                    'username' => $name,
-                    'fullname' => $custMap[$name] ?? '',
-                    'service'  => $r->getProperty('service'),
-                    'address'  => $r->getProperty('address'),
-                    'uptime'   => $r->getProperty('uptime'),
-                    'callerId' => $r->getProperty('caller-id'),
-                    'bytesIn'  => $q['bytesRx'],
-                    'bytesOut' => $q['bytesTx'],
-                    'rateIn'   => $q['rateRx'],   // bytes/sec from router
-                    'rateOut'  => $q['rateTx'],
-                ];
-            }
+            // 2. Active PPP sessions (IP/uptime/caller-id)
+            try {
+                $req = new RouterOS\Request('/ppp/active/print');
+                $req->setArgument('.proplist', 'name,service,address,uptime,caller-id');
+                foreach ($client->sendSync($req) as $r) {
+                    if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $name = $r->getProperty('name');
+                    $q = $queueByUser[$name] ?? ['bytesRx'=>0,'bytesTx'=>0,'rateRx'=>0,'rateTx'=>0];
+                    $out['sessions'][] = [
+                        'username' => $name,
+                        'fullname' => $custMap[$name] ?? '',
+                        'service'  => $r->getProperty('service'),
+                        'address'  => $r->getProperty('address'),
+                        'uptime'   => $r->getProperty('uptime'),
+                        'callerId' => $r->getProperty('caller-id'),
+                        'bytesIn'  => $q['bytesRx'],
+                        'bytesOut' => $q['bytesTx'],
+                        'rateIn'   => $q['rateRx'],
+                        'rateOut'  => $q['rateTx'],
+                    ];
+                }
+            } catch (Throwable $e) { /* no active PPP sessions */ }
 
-            // 3. Hotspot active (best-effort; skip on empty/error)
+            // 3. Hotspot active (best-effort)
             try {
                 $req = new RouterOS\Request('/ip/hotspot/active/print');
                 $req->setArgument('.proplist', 'user,address,uptime,bytes-in,bytes-out,mac-address');
@@ -536,7 +626,7 @@ switch ($action) {
                         'rateOut'  => 0,
                     ];
                 }
-            } catch (Exception $e) { /* no active hotspot sessions, skip */ }
+            } catch (Throwable $e) { /* no active hotspot sessions */ }
         } catch (Exception $e) {
             $out['error'] = $e->getMessage();
         }
