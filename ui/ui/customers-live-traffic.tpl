@@ -54,13 +54,15 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
         if (n < 1024*1024*1024) return (n/1024/1024).toFixed(2) + ' MB';
         return (n/1024/1024/1024).toFixed(2) + ' GB';
     }
+    // Mikrotik /queue/simple "rate" is already in bits/sec. We used to multiply
+    // by 8 here, which made every value 8x too high. Verified against
+    // (delta_bytes / delta_seconds) — those align with rate / 1e6 as Mbps.
     function fmtRate(bps) {
         if (!bps || bps < 0) return '—';
-        var bitps = bps * 8;
-        if (bitps < 1000) return bitps + ' bps';
-        if (bitps < 1000*1000) return (bitps/1000).toFixed(1) + ' Kbps';
-        if (bitps < 1000*1000*1000) return (bitps/1000/1000).toFixed(2) + ' Mbps';
-        return (bitps/1000/1000/1000).toFixed(2) + ' Gbps';
+        if (bps < 1000) return Math.round(bps) + ' bps';
+        if (bps < 1e6)  return (bps/1000).toFixed(1) + ' Kbps';
+        if (bps < 1e9)  return (bps/1e6).toFixed(2) + ' Mbps';
+        return (bps/1e9).toFixed(2) + ' Gbps';
     }
 
     function render(data) {

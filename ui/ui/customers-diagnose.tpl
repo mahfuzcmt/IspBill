@@ -50,10 +50,10 @@
                 <h4 style="margin-top:25px">Right-now bandwidth</h4>
                 <div class="row">
                     <div class="col-md-3"><strong>Download rate</strong><br>
-                        <span style="font-size:1.3em">{($queue.rateIn * 8 / 1000000)|string_format:"%.2f"} Mbps</span>
+                        <span style="font-size:1.3em">{($queue.rateIn / 1000000)|string_format:"%.2f"} Mbps</span>
                     </div>
                     <div class="col-md-3"><strong>Upload rate</strong><br>
-                        <span style="font-size:1.3em">{($queue.rateOut * 8 / 1000000)|string_format:"%.2f"} Mbps</span>
+                        <span style="font-size:1.3em">{($queue.rateOut / 1000000)|string_format:"%.2f"} Mbps</span>
                     </div>
                     <div class="col-md-3"><strong>Session ↓</strong><br>
                         {($queue.bytesIn / 1048576)|string_format:"%.1f"} MB

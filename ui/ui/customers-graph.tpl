@@ -123,19 +123,22 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
         if (n < 1024*1024*1024) return (n/1024/1024).toFixed(2) + ' MB';
         return (n/1024/1024/1024).toFixed(2) + ' GB';
     }
+    // Mikrotik /queue/simple "rate" is already in bits/sec — earlier we multiplied
+    // by 8, which made every reading 8x too high (a 75 Mbps capped session looked
+    // like ~600 Mbps). Verified by cross-checking against (delta_bytes / delta_sec).
     function fmtRate(bps) {
         if (!bps || bps < 0) return '0 bps';
-        var bits = bps * 8;
-        if (bits < 1000) return bits + ' bps';
-        if (bits < 1e6) return (bits/1000).toFixed(1) + ' Kbps';
-        if (bits < 1e9) return (bits/1e6).toFixed(2) + ' Mbps';
-        return (bits/1e9).toFixed(2) + ' Gbps';
+        if (bps < 1000) return Math.round(bps) + ' bps';
+        if (bps < 1e6) return (bps/1000).toFixed(1) + ' Kbps';
+        if (bps < 1e9) return (bps/1e6).toFixed(2) + ' Mbps';
+        return (bps/1e9).toFixed(2) + ' Gbps';
     }
 
     function buildChart(samples) {
         var canvas = document.getElementById('g-chart');
-        var dataIn  = samples.map(function (s) { return { x: s.ts, y: s.rateIn  * 8 / 1e6 }; });
-        var dataOut = samples.map(function (s) { return { x: s.ts, y: s.rateOut * 8 / 1e6 }; });
+        // bits/sec → Mbps
+        var dataIn  = samples.map(function (s) { return { x: s.ts, y: s.rateIn  / 1e6 }; });
+        var dataOut = samples.map(function (s) { return { x: s.ts, y: s.rateOut / 1e6 }; });
         if (chart) {
             chart.data.datasets[0].data = dataIn;
             chart.data.datasets[1].data = dataOut;
