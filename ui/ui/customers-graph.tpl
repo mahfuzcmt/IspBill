@@ -106,7 +106,7 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
     }
 
     function buildChart(samples) {
-        var ctx = document.getElementById('g-chart').getContext('2d');
+        var canvas = document.getElementById('g-chart');
         var dataIn  = samples.map(function (s) { return { x: s.ts, y: s.rateIn  * 8 / 1e6 }; });
         var dataOut = samples.map(function (s) { return { x: s.ts, y: s.rateOut * 8 / 1e6 }; });
         if (chart) {
@@ -115,7 +115,11 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
             chart.update('none');
             return;
         }
-        chart = new Chart(ctx, {
+        // Defensive: another Chart instance may already own this canvas
+        // (race between two concurrent polls, or stale instance after range change).
+        var existing = Chart.getChart(canvas);
+        if (existing) existing.destroy();
+        chart = new Chart(canvas.getContext('2d'), {
             type: 'line',
             data: {
                 datasets: [
@@ -174,7 +178,10 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
         document.getElementById('g-mac').textContent    = live.callerId|| '—';
     }
 
-    function fetchAndRender(initial) {
+    var inFlight = false;
+    function fetchAndRender() {
+        if (inFlight) { return; }     // skip overlap; the next tick will cover it
+        inFlight = true;
         var url = GRAPH_URL + '?minutes=' + rangeMinutes;
         fetch(url, { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
@@ -187,7 +194,10 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
                 setStatus('● live  ' + new Date().toLocaleTimeString(), 'text-success');
             })
             .catch(function (e) { setStatus('⚠ ' + e.message, 'text-danger'); })
-            .finally(function () { if (!initial) setTimeout(fetchAndRender, LIVE_POLL_MS); });
+            .finally(function () {
+                inFlight = false;
+                setTimeout(fetchAndRender, LIVE_POLL_MS);
+            });
     }
 
     document.querySelectorAll('.g-range').forEach(function (btn) {
@@ -197,14 +207,15 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
                 b.classList.remove('btn-primary'); b.classList.add('btn-default');
             });
             btn.classList.remove('btn-default'); btn.classList.add('btn-primary');
-            chart = null; // force rebuild with new range
-            document.getElementById('g-chart').getContext('2d').clearRect(0,0,9999,9999);
-            fetchAndRender(true);
+            // Destroy properly before rebuilding so Chart.js releases the canvas.
+            if (chart) { chart.destroy(); chart = null; }
+            fetchAndRender();
         });
     });
 
-    fetchAndRender(true);
-    setTimeout(fetchAndRender, LIVE_POLL_MS);
+    // Single polling loop — .finally always schedules the next tick, so we
+    // never have two in-flight fetches racing to construct the Chart.
+    fetchAndRender();
 })();
 {/literal}
 </script>
