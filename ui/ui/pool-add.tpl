@@ -24,7 +24,7 @@
 						<div class="col-md-6">
 							<select id="routers" name="routers" class="form-control">
                                 {foreach $r as $rs}
-									<option value="{$rs['name']}">{$rs['name']}</option>
+									<option value="{$rs['value']}">{$rs['label']}</option>
                                 {/foreach}
                             </select>
 						</div>

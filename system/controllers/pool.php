@@ -39,8 +39,7 @@ switch ($action) {
         break;
 
     case 'add':
-        $r = ORM::for_table('tbl_routers')->find_many();
-        $ui->assign('r', $r);
+        $ui->assign('r', Mikrotik::dropdownOptions());
         run_hook('view_add_pool'); #HOOK
         $ui->display('pool-add.tpl');
         break;

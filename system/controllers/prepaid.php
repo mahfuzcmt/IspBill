@@ -497,11 +497,9 @@ switch ($action) {
             run_hook('create_voucher'); #HOOK
 
             // Look up plan + router for the Mikrotik push
+            // Mikrotik::info() parses Name / Name::secondary / numeric-id selectors uniformly.
             $planObj = ORM::for_table('tbl_plans')->find_one($plan);
-            $mikrotik = ORM::for_table('tbl_routers')->where('name', $server)->find_one();
-            if (!$mikrotik && is_numeric($server)) {
-                $mikrotik = ORM::for_table('tbl_routers')->find_one((int) $server);
-            }
+            $mikrotik = Mikrotik::info($server);
 
             // Open a single Mikrotik connection for the whole batch
             $client = null;

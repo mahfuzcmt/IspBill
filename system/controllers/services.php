@@ -42,8 +42,7 @@ switch ($action) {
     case 'add':
         $d = ORM::for_table('tbl_bandwidth')->find_many();
         $ui->assign('d', $d);
-        $r = ORM::for_table('tbl_routers')->find_many();
-        $ui->assign('r', $r);
+        $ui->assign('r', Mikrotik::dropdownOptions());
         run_hook('view_add_plan'); #HOOK
         $ui->display('hotspot-add.tpl');
         break;
@@ -70,15 +69,33 @@ switch ($action) {
         $d = ORM::for_table('tbl_plans')->find_one($id);
         if ($d) {
             run_hook('delete_plan'); #HOOK
+            $warn = '';
             if(!$config['radius_mode']){
                 $mikrotik = Mikrotik::info($d['routers']);
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::removeHotspotPlan($client,$d['name_plan']);
+                if ($mikrotik) {
+                    list($client, $used, $err) = Mikrotik::getClientForRouter($mikrotik->as_array(), 'auto');
+                    if ($client) {
+                        try {
+                            Mikrotik::removeHotspotPlan($client, $d['name_plan']);
+                        } catch (Exception $e) {
+                            $warn = Lang::T('Plan removed from billing, but router cleanup failed: ') . $e->getMessage();
+                        }
+                    } else {
+                        $warn = Lang::T('Plan removed from billing, but router was unreachable: ') . $err;
+                    }
+                } else {
+                    $warn = Lang::T('Plan removed from billing; linked router no longer exists.');
+                }
             }
 
             $d->delete();
 
+            if ($warn !== '') {
+                r2(U . 'services/hotspot', 'e', $warn);
+            }
             r2(U . 'services/hotspot', 's', $_L['Delete_Successfully']);
+        } else {
+            r2(U . 'services/hotspot', 'e', $_L['Account_Not_Found']);
         }
         break;
 
@@ -260,8 +277,7 @@ switch ($action) {
         $ui->assign('d', $d);
         $p = ORM::for_table('tbl_pool')->find_many();
         $ui->assign('p', $p);
-        $r = ORM::for_table('tbl_routers')->find_many();
-        $ui->assign('r', $r);
+        $ui->assign('r', Mikrotik::dropdownOptions());
         run_hook('view_add_ppoe'); #HOOK
         $ui->display('pppoe-add.tpl');
         break;
@@ -290,14 +306,32 @@ switch ($action) {
         $d = ORM::for_table('tbl_plans')->find_one($id);
         if ($d) {
             run_hook('delete_ppoe'); #HOOK
+            $warn = '';
             if(!$config['radius_mode']){
                 $mikrotik = Mikrotik::info($d['routers']);
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::removePpoePlan($client, $d['name_plan']);
+                if ($mikrotik) {
+                    list($client, $used, $err) = Mikrotik::getClientForRouter($mikrotik->as_array(), 'auto');
+                    if ($client) {
+                        try {
+                            Mikrotik::removePpoePlan($client, $d['name_plan']);
+                        } catch (Exception $e) {
+                            $warn = Lang::T('Plan removed from billing, but router cleanup failed: ') . $e->getMessage();
+                        }
+                    } else {
+                        $warn = Lang::T('Plan removed from billing, but router was unreachable: ') . $err;
+                    }
+                } else {
+                    $warn = Lang::T('Plan removed from billing; linked router no longer exists.');
+                }
             }
             $d->delete();
 
+            if ($warn !== '') {
+                r2(U . 'services/pppoe', 'e', $warn);
+            }
             r2(U . 'services/pppoe', 's', $_L['Delete_Successfully']);
+        } else {
+            r2(U . 'services/pppoe', 'e', $_L['Account_Not_Found']);
         }
         break;
 

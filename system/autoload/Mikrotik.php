@@ -4,9 +4,63 @@ use PEAR2\Net\RouterOS;
 
 class Mikrotik
 {
-    public static function info($name){
-		$d = ORM::for_table('tbl_routers')->where('name',$name)->find_one();
-        return $d;
+    /**
+     * Resolve a router selector to connection details.
+     *
+     * The selector may be:
+     *   - A router name: "Main PPPoE Router"            -> primary endpoint
+     *   - Suffixed:      "Main PPPoE Router::secondary" -> secondary endpoint
+     *   - A numeric id:  "1"                            -> primary endpoint (legacy)
+     *
+     * Returns an associative array with ip_address/username/password/enabled
+     * already swapped to the chosen endpoint, plus _role ('primary'|'secondary')
+     * for callers that need to know which endpoint they got. Returns null if
+     * the router doesn't exist.
+     */
+    public static function info($selector){
+        if ($selector === null || $selector === '') return null;
+        $role = 'primary';
+        $name = (string) $selector;
+        if (strpos($name, '::') !== false) {
+            list($name, $role) = explode('::', $name, 2);
+        }
+        $d = ORM::for_table('tbl_routers')->where('name', $name)->find_one();
+        if (!$d && is_numeric($name)) {
+            $d = ORM::for_table('tbl_routers')->find_one((int) $name);
+        }
+        if (!$d) return null;
+        $row = $d->as_array();
+        if ($role === 'secondary') {
+            $row['ip_address'] = $row['secondary_ip_address'];
+            $row['username']   = $row['secondary_username'];
+            $row['password']   = $row['secondary_password'];
+            $row['enabled']    = $row['secondary_enabled'];
+        }
+        $row['_role'] = $role;
+        return $row;
+    }
+
+    /**
+     * Flattened router options for <select> dropdowns. Each enabled record
+     * yields one option for primary plus one for secondary if configured.
+     * Returns: [ ['value' => 'Name' | 'Name::secondary', 'label' => 'Name' | 'Name (Secondary)', 'enabled' => bool], ... ]
+     */
+    public static function dropdownOptions(){
+        $opts = [];
+        $rows = ORM::for_table('tbl_routers')->find_many();
+        foreach ($rows as $r) {
+            if ($r['enabled']) {
+                $opts[] = ['value' => $r['name'], 'label' => $r['name'], 'enabled' => true];
+            }
+            if (!empty($r['secondary_ip_address']) && $r['secondary_enabled']) {
+                $opts[] = [
+                    'value'   => $r['name'] . '::secondary',
+                    'label'   => $r['name'] . ' (Secondary)',
+                    'enabled' => true,
+                ];
+            }
+        }
+        return $opts;
     }
 
     public static function getClient($ip, $user, $pass)
@@ -17,6 +71,68 @@ class Mikrotik
         } catch (Exception $e) {
             die("Unable to connect to the router.<br>" . $e->getMessage());
         }
+    }
+
+    /**
+     * Like getClient(), but returns null on failure instead of die()-ing.
+     * Used by failover paths and the Remote Login console.
+     */
+    public static function tryClient($ip, $user, $pass)
+    {
+        if (empty($ip) || empty($user)) return null;
+        try {
+            $iport = explode(":", $ip);
+            return new RouterOS\Client($iport[0], $user, $pass, ($iport[1]) ? $iport[1] : null);
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Connect to a router row, preferring the requested target.
+     * $target: 'primary' | 'secondary' | 'auto' (default).
+     * 'auto' tries primary first, then secondary if it is enabled.
+     * Returns [client, used_target, error_message].
+     */
+    public static function getClientForRouter($router, $target = 'auto')
+    {
+        $primary = [
+            'ip'   => $router['ip_address'],
+            'user' => $router['username'],
+            'pass' => $router['password'],
+            'on'   => !empty($router['enabled']),
+        ];
+        $secondary = [
+            'ip'   => $router['secondary_ip_address'] ?? '',
+            'user' => $router['secondary_username'] ?? '',
+            'pass' => $router['secondary_password'] ?? '',
+            'on'   => !empty($router['secondary_enabled']),
+        ];
+
+        $order = ($target === 'secondary')
+            ? [['secondary', $secondary], ['primary', $primary]]
+            : [['primary', $primary], ['secondary', $secondary]];
+
+        $errors = [];
+        foreach ($order as $entry) {
+            list($label, $cfg) = $entry;
+            if (!$cfg['on'] || empty($cfg['ip'])) {
+                continue;
+            }
+            $client = self::tryClient($cfg['ip'], $cfg['user'], $cfg['pass']);
+            if ($client) {
+                return [$client, $label, null];
+            }
+            $errors[] = "$label ({$cfg['ip']})";
+            if ($target === 'primary' || $target === 'secondary') {
+                // explicit target requested — do not fall back
+                break;
+            }
+        }
+        $msg = empty($errors)
+            ? 'No reachable router endpoint is enabled.'
+            : 'Unable to reach: ' . implode(', ', $errors);
+        return [null, null, $msg];
     }
 
     public static function addHotspotPlan($client, $name, $sharedusers, $rate){

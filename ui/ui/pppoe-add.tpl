@@ -61,7 +61,7 @@
 									<select id="routers" name="routers" class="form-control">
 										<option value=''>{$_L['Select_Routers']}</option>
 										{foreach $r as $rs}
-											<option value="{$rs['name']}">{$rs['name']}</option>
+											<option value="{$rs['value']}">{$rs['label']}</option>
 										{/foreach}
 									</select>
                                     <p class="help-block">{Lang::T('Cannot be change after saved')}</p>

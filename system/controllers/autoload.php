@@ -21,9 +21,7 @@ switch ($action) {
         break;
 
     case 'server':
-		$d = ORM::for_table('tbl_routers')->where('enabled', '1')->find_many();
-		$ui->assign('d',$d);
-
+		$ui->assign('d', Mikrotik::dropdownOptions());
         $ui->display('autoload-server.tpl');
         break;
 

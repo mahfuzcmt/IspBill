@@ -1,7 +1,7 @@
 {include file="sections/header.tpl"}
 
 <div class="row">
-    <div class="col-lg-3 col-xs-6">
+   {* <div class="col-lg-3 col-xs-6">
         <div class="small-box bg-aqua">
             <div class="inner">
                 <h4><sup>{$_c['currency_code']}</sup>
@@ -14,7 +14,7 @@
             <a href="{$_url}reports/by-date" class="small-box-footer">{$_L['View_Reports']} <i
                     class="fa fa-arrow-circle-right"></i></a>
         </div>
-    </div>
+    </div>*}
     <div class="col-lg-3 col-xs-6">
         <div class="small-box bg-green">
             <div class="inner">
@@ -45,7 +45,7 @@
         </div>
     </div>
     <div class="col-lg-3 col-xs-6">
-        <div class="small-box bg-red">
+        <div class="small-box bg-aqua">
             <div class="inner">
                 <h4>{$u_all}</h4>
 
@@ -55,6 +55,22 @@
                 <i class="fa fa-users"></i>
             </div>
             <a href="{$_url}customers/list" class="small-box-footer">{$_L['View_All']} <i
+                    class="fa fa-arrow-circle-right"></i></a>
+        </div>
+    </div>
+    <div class="col-lg-3 col-xs-6">
+        <div class="small-box bg-red" title="Sum of all credit sales currently marked 'due' across all customers, all time. Click to find customers with outstanding credit.">
+            <div class="inner">
+                <h4><sup>{$_c['currency_code']}</sup>
+                    {number_format($credit_due_total,0,$_c['dec_point'],$_c['thousands_sep'])}</h4>
+                <p>Outstanding Credit
+                    {if $credit_due_count > 0}<small style="opacity:.85">({$credit_due_count} due)</small>{/if}
+                </p>
+            </div>
+            <div class="icon">
+                <i class="fa fa-handshake-o"></i>
+            </div>
+            <a href="{$_url}customers/credits" class="small-box-footer" style="color:#fff">View All Credit Sales <i
                     class="fa fa-arrow-circle-right"></i></a>
         </div>
     </div>

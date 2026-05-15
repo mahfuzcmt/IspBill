@@ -69,21 +69,56 @@ class SmsSender
             'type'     => 'text',
         ];
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query($params),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT        => 20,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_USERAGENT      => 'NetPulse/1.0 (php)',
-        ]);
-        $body = curl_exec($ch);
-        $out['http']  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $out['body']  = is_string($body) ? substr($body, 0, 500) : '';
-        $out['error'] = curl_error($ch);
-        curl_close($ch);
+        // Use cURL when the extension is available (more reliable), otherwise
+        // fall back to the PHP stream wrapper so this works in containers
+        // that don't ship php-curl.
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => http_build_query($params),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT        => 20,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_USERAGENT      => 'NetPulse/1.0 (php)',
+            ]);
+            $body = curl_exec($ch);
+            $out['http']  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $out['body']  = is_string($body) ? substr($body, 0, 500) : '';
+            $out['error'] = curl_error($ch);
+            curl_close($ch);
+        } else {
+            $ctx = stream_context_create([
+                'http' => [
+                    'method'        => 'POST',
+                    'header'        => "Content-Type: application/x-www-form-urlencoded\r\nUser-Agent: NetPulse/1.0 (php)\r\n",
+                    'content'       => http_build_query($params),
+                    'timeout'       => 20,
+                    'ignore_errors' => true, // capture body even on 4xx/5xx
+                ],
+                'ssl' => [
+                    'verify_peer'      => false,
+                    'verify_peer_name' => false,
+                ],
+            ]);
+            $body = @file_get_contents($url, false, $ctx);
+            $out['body']  = is_string($body) ? substr($body, 0, 500) : '';
+            $out['http']  = 0;
+            $out['error'] = '';
+            if (isset($http_response_header) && is_array($http_response_header)) {
+                foreach ($http_response_header as $h) {
+                    if (preg_match('#^HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) {
+                        $out['http'] = (int) $m[1];
+                        break;
+                    }
+                }
+            }
+            if ($body === false) {
+                $err = error_get_last();
+                $out['error'] = $err && isset($err['message']) ? $err['message'] : 'stream POST failed';
+            }
+        }
 
         // BulkSMSBD returns a JSON body with {"response_code": 202, "message_id": ...}
         // 202 = accepted by gateway. HTTP 200 + non-error means success.

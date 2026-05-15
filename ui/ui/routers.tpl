@@ -32,6 +32,7 @@
                         <thead>
                             <tr>
                                 <th>{$_L['Router_Name']}</th>
+                                <th>{Lang::T('Role')}</th>
                                 <th>{$_L['IP_Address']}</th>
                                 <th>{$_L['Username']}</th>
                                 <th>{$_L['Description']}</th>
@@ -40,17 +41,46 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {foreach $d as $ds}
-                                <tr {if $ds['enabled'] != 1}class="danger" title="disabled" {/if}>
-                                    <td>{$ds['name']}</td>
-                                    <td>{$ds['ip_address']}</td>
-                                    <td>{$ds['username']}</td>
-                                    <td>{$ds['description']}</td>
-                                    <td>{if $ds['enabled'] == 1}Enabled{else}Disabled{/if}</td>
+                            {foreach $rows as $r}
+                                <tr {if $r['enabled'] != 1}class="danger" title="disabled" {/if}>
+                                    <td>{$r['name']}</td>
                                     <td>
-                                        <a href="{$_url}routers/edit/{$ds['id']}"
-                                            class="btn btn-info btn-xs">{$_L['Edit']}</a>
-                                        <a href="{$_url}routers/delete/{$ds['id']}" id="{$ds['id']}" class="btn btn-danger btn-xs">{$_L['Delete']}</a>
+                                        {if $r['is_primary']}
+                                            <span class="label label-primary">{Lang::T('Primary')}</span>
+                                        {else}
+                                            <span class="label label-warning">{Lang::T('Secondary')}</span>
+                                        {/if}
+                                    </td>
+                                    <td>{$r['ip_address']}</td>
+                                    <td>{$r['username']}</td>
+                                    <td>{$r['description']}</td>
+                                    <td>{if $r['enabled'] == 1}Enabled{else}Disabled{/if}</td>
+                                    <td>
+                                        {if $r['enabled'] == 1}
+                                            <a href="{$_url}routers/remote-login/{$r['id']}/{$r['role']}" class="btn btn-success btn-xs">
+                                                <i class="ion ion-log-in"></i> {Lang::T('Remote Login')}
+                                            </a>
+                                        {else}
+                                            <button class="btn btn-success btn-xs" disabled title="{Lang::T('Endpoint disabled')}">
+                                                <i class="ion ion-log-in"></i> {Lang::T('Remote Login')}
+                                            </button>
+                                        {/if}
+                                        {if $r['webfig_url']}
+                                            <a href="{$r['webfig_url']}" target="_blank" rel="noopener" class="btn btn-primary btn-xs">
+                                                <i class="ion ion-android-globe"></i> {Lang::T('Web Login')}
+                                            </a>
+                                        {else}
+                                            <button class="btn btn-primary btn-xs" disabled title="{Lang::T('Set Web URL in Edit')}">
+                                                <i class="ion ion-android-globe"></i> {Lang::T('Web Login')}
+                                            </button>
+                                        {/if}
+                                        {if $r['enabled'] == 1}
+                                            <a href="{$_url}routers/import-plans/{$r['id']}/{$r['role']}" class="btn btn-warning btn-xs"
+                                               onclick="return confirm('{Lang::T('Import hotspot + PPPoE profiles from this router as draft plans? Existing plans with the same name are skipped.')}');">
+                                                <i class="ion ion-android-download"></i> {Lang::T('Import Plans')}
+                                            </a>
+                                        {/if}
+                                        <a href="{$_url}routers/edit/{$r['id']}" class="btn btn-info btn-xs">{$_L['Edit']}</a>
                                     </td>
                                 </tr>
                             {/foreach}

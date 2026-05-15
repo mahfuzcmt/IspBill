@@ -146,6 +146,27 @@
                         </div>
                     </div>
 
+                    <div class="form-group">
+                        <div class="col-md-offset-3 col-md-6">
+                            <label class="checkbox-inline">
+                                <input type="checkbox" name="send_sms" value="1">
+                                <strong>Send SMS to customer</strong> &mdash;
+                                on status change, send the expiry / recharge SMS template. Default off.
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="col-md-offset-3 col-md-6">
+                            <label class="checkbox-inline">
+                                <input type="checkbox" name="credit_sale" value="1">
+                                <strong>Is this a credit sale?</strong> &mdash;
+                                tick on a renewal (Suspended → Active) if the customer hasn't paid yet.
+                                A "due" row will be added to their account and they can be marked paid later.
+                            </label>
+                        </div>
+                    </div>
+
                     <hr>
 
                     <div class="form-group">

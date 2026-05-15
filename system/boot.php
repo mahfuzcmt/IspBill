@@ -65,6 +65,95 @@ foreach ($result as $value) {
     $config[$value['setting']] = $value['value'];
 }
 
+// Idempotent schema upgrades for existing installs.
+if (empty($config['schema_secondary_router_v1'])) {
+    $db = ORM::get_db();
+    $cols = $db->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_routers'
+           AND COLUMN_NAME IN ('secondary_ip_address','secondary_username','secondary_password','secondary_enabled')"
+    )->fetchAll(PDO::FETCH_COLUMN);
+    $needed = [
+        'secondary_ip_address' => "ADD COLUMN `secondary_ip_address` varchar(128) DEFAULT NULL AFTER `enabled`",
+        'secondary_username'   => "ADD COLUMN `secondary_username` varchar(50) DEFAULT NULL AFTER `secondary_ip_address`",
+        'secondary_password'   => "ADD COLUMN `secondary_password` varchar(60) DEFAULT NULL AFTER `secondary_username`",
+        'secondary_enabled'    => "ADD COLUMN `secondary_enabled` tinyint(1) NOT NULL DEFAULT 0 AFTER `secondary_password`",
+    ];
+    foreach ($needed as $col => $alter) {
+        if (!in_array($col, $cols, true)) {
+            $db->exec("ALTER TABLE `tbl_routers` $alter");
+        }
+    }
+    $flag = ORM::for_table('tbl_appconfig')->where('setting','schema_secondary_router_v1')->find_one();
+    if (!$flag) {
+        $flag = ORM::for_table('tbl_appconfig')->create();
+        $flag->setting = 'schema_secondary_router_v1';
+    }
+    $flag->value = '1';
+    $flag->save();
+    $config['schema_secondary_router_v1'] = '1';
+}
+
+// Credit sales tracking (renew-on-credit, mark-as-paid).
+if (empty($config['schema_credit_sales_v1'])) {
+    $db = ORM::get_db();
+    $exists = $db->query(
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_credit_sales'"
+    )->fetchColumn();
+    if (!$exists) {
+        $db->exec("CREATE TABLE `tbl_credit_sales` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `customer_id` INT UNSIGNED NOT NULL,
+            `username` VARCHAR(64) NOT NULL,
+            `plan_name` VARCHAR(128) DEFAULT NULL,
+            `bill_month` CHAR(7) DEFAULT NULL,
+            `amount` DECIMAL(10,2) NOT NULL DEFAULT 0,
+            `status` VARCHAR(16) NOT NULL DEFAULT 'due',
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `paid_at` DATETIME NULL DEFAULT NULL,
+            `notes` VARCHAR(255) DEFAULT NULL,
+            INDEX `idx_customer_status` (`customer_id`, `status`),
+            INDEX `idx_status` (`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    $flag = ORM::for_table('tbl_appconfig')->where('setting','schema_credit_sales_v1')->find_one();
+    if (!$flag) {
+        $flag = ORM::for_table('tbl_appconfig')->create();
+        $flag->setting = 'schema_credit_sales_v1';
+    }
+    $flag->value = '1';
+    $flag->save();
+    $config['schema_credit_sales_v1'] = '1';
+}
+
+// Web Login URLs per endpoint.
+if (empty($config['schema_router_webfig_url_v1'])) {
+    $db = ORM::get_db();
+    $cols = $db->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_routers'
+           AND COLUMN_NAME IN ('webfig_url','secondary_webfig_url')"
+    )->fetchAll(PDO::FETCH_COLUMN);
+    $needed = [
+        'webfig_url'           => "ADD COLUMN `webfig_url` varchar(255) DEFAULT NULL AFTER `secondary_enabled`",
+        'secondary_webfig_url' => "ADD COLUMN `secondary_webfig_url` varchar(255) DEFAULT NULL AFTER `webfig_url`",
+    ];
+    foreach ($needed as $col => $alter) {
+        if (!in_array($col, $cols, true)) {
+            $db->exec("ALTER TABLE `tbl_routers` $alter");
+        }
+    }
+    $flag = ORM::for_table('tbl_appconfig')->where('setting','schema_router_webfig_url_v1')->find_one();
+    if (!$flag) {
+        $flag = ORM::for_table('tbl_appconfig')->create();
+        $flag->setting = 'schema_router_webfig_url_v1';
+    }
+    $flag->value = '1';
+    $flag->save();
+    $config['schema_router_webfig_url_v1'] = '1';
+}
+
 date_default_timezone_set($config['timezone']);
 $_c = $config;
 

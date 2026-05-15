@@ -12,7 +12,8 @@
 												<div class="input-group-addon">
 													<span class="fa fa-search"></span>
 												</div>
-												<input type="text" name="username" class="form-control" placeholder="{$_L['Search_by_Username']}...">
+												<input type="text" name="username" class="form-control" placeholder="{$_L['Search_by_Username']}..."
+													value="{if isset($smarty.post.username)}{$smarty.post.username|escape:'html'}{/if}">
 												<select name="service_type" class="form-control" style="max-width:140px">
 													<option value="PPPoE"   {if !isset($service_type) || $service_type eq 'PPPoE'}selected{/if}>PPPoE</option>
 													<option value="Hotspot" {if isset($service_type)  && $service_type eq 'Hotspot'}selected{/if}>Hotspot</option>
@@ -70,8 +71,18 @@
                                                     <td align="center">
                                                         {if isset($liveState[$ds['username']])}
                                                             {assign var=live value=$liveState[$ds['username']]}
-                                                            {if $live.disabled}
-                                                                <span class="label label-default" title="Disabled on router">Suspended</span>
+                                                            {if ($ds['computed_status'] == 'Suspended' || $ds['computed_status'] == 'Expired' || $live.profile == 'Suspended') && $live.active}
+                                                                {* SOFT SUSPEND: PPP session is up but customer isn't paying. Traffic
+                                                                   is dropped at the firewall; captive-page redirect serves notice. *}
+                                                                <span class="label label-warning" title="PPP session up but customer is in a non-paying state — traffic dropped at firewall, captive page serves notice on HTTP probes.">
+                                                                    {if $ds['computed_status'] == 'Expired'}Expired{else}Suspended{/if} · <strong>Online</strong>
+                                                                </span>
+                                                                {if $live.address}<br><small class="text-muted">{$live.address}</small>{/if}
+                                                            {elseif $ds['computed_status'] == 'Suspended' || $ds['computed_status'] == 'Expired' || $live.profile == 'Suspended'}
+                                                                <span class="label {if $ds['computed_status'] == 'Expired'}label-danger{else}label-default{/if}">{$ds['computed_status']}</span>
+                                                                {if $live.lastLoggedOut}<br><small class="text-muted">last seen {$live.lastLoggedOut}</small>{/if}
+                                                            {elseif $live.disabled}
+                                                                <span class="label label-default" title="Disabled on router">Disabled</span>
                                                             {elseif $live.active}
                                                                 <span class="label label-success" title="Currently connected">Online</span>
                                                                 {if $live.address}<br><small class="text-muted">{$live.address}</small>{/if}
@@ -80,7 +91,7 @@
                                                                 {if $live.lastLoggedOut}<br><small class="text-muted">last seen {$live.lastLoggedOut}</small>{/if}
                                                             {/if}
                                                         {else}
-                                                            {* Fallback: not present on router, use DB-derived status *}
+                                                            {* Fallback: customer not present on router *}
                                                             {if $ds['computed_status'] == 'Active'}
                                                                 <span class="label label-success">Active <small>(DB)</small></span>
                                                             {elseif $ds['computed_status'] == 'Expired'}
@@ -126,13 +137,21 @@
     var timer = null;
     function submit() {
         clearTimeout(timer);
-        timer = setTimeout(function () { form.submit(); }, 300);
+        timer = setTimeout(function () { form.submit(); }, 350);
     }
     if (input)  input.addEventListener('input',  submit);
     if (select) select.addEventListener('change', function () { form.submit(); });
-    // The Search button becomes redundant once live-search is on
     var btn = form.querySelector('button.btn-success');
     if (btn) btn.style.display = 'none';
+
+    // Restore focus after the live-search round-trip — the page just reloaded
+    // with the search value in the input but no focus. Place caret at end so
+    // the user can keep typing as if nothing happened.
+    if (input && input.value) {
+        input.focus();
+        var len = input.value.length;
+        try { input.setSelectionRange(len, len); } catch (e) {}
+    }
 })();
 {/literal}
 </script>

@@ -486,8 +486,19 @@ switch ($action) {
         }
 
         // ---- Update recharge row if a plan is in play ----
+        // On status off→on with no admin-supplied date, auto-extend expiration by 30 days
+        // (renew). Base the extension on max(today, oldExp) so adding days to an already-
+        // future exp doesn't shorten it; suspending then resuming the same day adds 30d.
         if ($plan) {
-            if ($newExp === '') $newExp = $oldExp ?: date('Y-m-d', strtotime('+30 days'));
+            $isResume = ($oldStatus === 'off' && $newStatus === 'on');
+            if ($newExp === '') {
+                if ($isResume) {
+                    $base = max(strtotime(date('Y-m-d')), strtotime($oldExp ?: 'today'));
+                    $newExp = date('Y-m-d', strtotime('+30 days', $base));
+                } else {
+                    $newExp = $oldExp ?: date('Y-m-d', strtotime('+30 days'));
+                }
+            }
             if ($r) {
                 $r->plan_id    = $plan['id'];
                 $r->namebp     = $plan['name_plan'];
@@ -510,6 +521,21 @@ switch ($action) {
                 $rr->routers      = $mikrotik ? $mikrotik['name'] : '';
                 $rr->type         = $service;
                 $rr->save();
+            }
+
+            // Credit-sale record — admin ticked "Is this a credit sale?" on a renewal
+            // (off→on). Money hasn't arrived yet; track it as due so it shows up on
+            // the customer's billing page and can be marked paid later.
+            if (_post('credit_sale') === '1' && $isResume) {
+                $cs = ORM::for_table('tbl_credit_sales')->create();
+                $cs->customer_id = $id;
+                $cs->username    = $username;
+                $cs->plan_name   = $plan['name_plan'];
+                $cs->bill_month  = date('Y-m');
+                $cs->amount      = $plan['price'];
+                $cs->status      = 'due';
+                $cs->created_at  = date('Y-m-d H:i:s');
+                $cs->save();
             }
         }
 
@@ -567,12 +593,34 @@ switch ($action) {
             }
         }
 
+        // ---- Notify customer via SMS on status flip (opt-in per submission) ----
+        // The "Send SMS to customer" checkbox in the form is unchecked by default, so
+        // routine status flips (e.g. auto-corrections, internal updates) don't spam
+        // the customer. Admin must tick it explicitly to send.
+        $sendSms = _post('send_sms') === '1';
+        $smsNote = '';
+        if ($sendSms && $oldStatus !== $newStatus && !empty($phonenumber)) {
+            $smsVars = [
+                'company'    => isset($config['CompanyName']) ? $config['CompanyName'] : 'NetPulse',
+                'fullname'   => $fullname,
+                'username'   => $username,
+                'plan'       => $plan ? $plan['name_plan'] : ($r ? $r['namebp'] : ''),
+                'price'      => $plan ? $plan['price'] : '',
+                'expiration' => $r ? $r['expiration'] : ($newExp ?: ''),
+            ];
+            $tplKey = ($newStatus === 'off') ? 'sms_template_expiry' : 'sms_template_recharge';
+            $res = SmsSender::sendTemplate($phonenumber, $tplKey, $smsVars);
+            $smsNote = $res['ok']
+                ? ' (' . ($newStatus === 'off' ? 'suspend' : 'resume') . ' SMS sent)'
+                : ' (' . ($newStatus === 'off' ? 'suspend' : 'resume') . ' SMS failed: ' . $res['error'] . ')';
+        }
+
         _log("$oldUsername edited by " . ($admin['username'] ?? '?') .
             ($oldUsername !== $username ? " → $username" : '') .
             ($plan ? "; plan=$oldPlanName→{$plan['name_plan']}" : '') .
             "; status=$oldStatus→$newStatus; exp=$oldExp→$newExp", 'User', $id);
 
-        r2(U . 'customers/list', 's', 'Customer updated' . $routerWarning);
+        r2(U . 'customers/list', 's', 'Customer updated' . $routerWarning . $smsNote);
         break;
 
     case 'diagnose':
@@ -983,10 +1031,17 @@ switch ($action) {
             ->order_by_asc('name_plan')
             ->find_many();
 
+        // Credit sales for this customer (renewals where money is pending).
+        $creditSales = ORM::for_table('tbl_credit_sales')
+            ->where('customer_id', $id)
+            ->order_by_desc('created_at')
+            ->find_many();
+
         $ui->assign('c', $c);
         $ui->assign('r', $r);
         $ui->assign('plans', $plans);
         $ui->assign('service_type', $serviceType);
+        $ui->assign('creditSales', $creditSales);
         $ui->display('customers-billing.tpl');
         break;
 
@@ -1008,7 +1063,11 @@ switch ($action) {
         $newPlan = ORM::for_table('tbl_plans')->find_one($newPlanId);
         if (!$newPlan) { r2(U . 'customers/billing/' . $id, 'e', 'Invalid plan selected'); }
 
-        // Validate expiration
+        // Validate expiration. Allow blank: on off→on (resume), auto-extend by 30 days.
+        if ($newExpiration === '' && $r && $r['status'] === 'off' && $newStatus === 'on') {
+            $base = max(strtotime(date('Y-m-d')), strtotime($r['expiration'] ?: 'today'));
+            $newExpiration = date('Y-m-d', strtotime('+30 days', $base));
+        }
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $newExpiration)) {
             r2(U . 'customers/billing/' . $id, 'e', 'Invalid expiration date (need YYYY-MM-DD)');
         }
@@ -1060,6 +1119,19 @@ switch ($action) {
             $r->save();
         }
 
+        // Credit sale on a renewal (off→on with checkbox ticked).
+        if (_post('credit_sale') === '1' && $oldStatus === 'off' && $newStatus === 'on') {
+            $cs = ORM::for_table('tbl_credit_sales')->create();
+            $cs->customer_id = $id;
+            $cs->username    = $c['username'];
+            $cs->plan_name   = $newPlan['name_plan'];
+            $cs->bill_month  = date('Y-m');
+            $cs->amount      = $newPlan['price'];
+            $cs->status      = 'due';
+            $cs->created_at  = date('Y-m-d H:i:s');
+            $cs->save();
+        }
+
         // Sync the router — only for PPPoE in this iteration; Hotspot would be similar
         if (!$config['radius_mode'] && $serviceType === 'PPPoE') {
             try {
@@ -1082,13 +1154,85 @@ switch ($action) {
             }
         }
 
+        // SMS on status flip — same opt-in pattern as edit-post (checkbox in form).
+        $sendSms = _post('send_sms') === '1';
+        $smsNote = '';
+        if ($sendSms && $oldStatus !== $newStatus && !empty($c['phonenumber'])) {
+            $smsVars = [
+                'company'    => isset($config['CompanyName']) ? $config['CompanyName'] : 'NetPulse',
+                'fullname'   => $c['fullname'],
+                'username'   => $c['username'],
+                'plan'       => $newPlan['name_plan'],
+                'price'      => $newPlan['price'],
+                'expiration' => $newExpiration,
+            ];
+            $tplKey = ($newStatus === 'off') ? 'sms_template_expiry' : 'sms_template_recharge';
+            $res = SmsSender::sendTemplate($c['phonenumber'], $tplKey, $smsVars);
+            $smsNote = $res['ok']
+                ? ' (' . ($newStatus === 'off' ? 'suspend' : 'resume') . ' SMS sent)'
+                : ' (' . ($newStatus === 'off' ? 'suspend' : 'resume') . ' SMS failed: ' . $res['error'] . ')';
+        }
+
         // Audit-ish log row
         _log($c['username'] . ' billing updated by ' . $admin['username']
             . ' (plan: ' . $oldPlanName . ' → ' . $newPlan['name_plan']
             . ', exp: ' . $oldExp . ' → ' . $newExpiration
             . ', status: ' . $oldStatus . ' → ' . $newStatus . ')', 'User', $id);
 
-        r2(U . 'customers/list', 's', 'Billing updated for ' . $c['username']);
+        r2(U . 'customers/list', 's', 'Billing updated for ' . $c['username'] . $smsNote);
+        break;
+
+    case 'credits':
+        // Cross-customer view of all credit sales (lifetime). Filterable by status
+        // via ?status=due|paid|all. Default = due (most useful — admin wants to chase).
+        $statusFilter = $_GET['status'] ?? 'due';
+        if (!in_array($statusFilter, ['due','paid','all'], true)) $statusFilter = 'due';
+
+        $sql = "
+            SELECT cs.id, cs.customer_id, cs.username, cs.plan_name, cs.bill_month,
+                   cs.amount, cs.status, cs.created_at, cs.paid_at, cs.notes,
+                   c.fullname, c.phonenumber
+            FROM tbl_credit_sales cs
+            LEFT JOIN tbl_customers c ON c.id = cs.customer_id
+        ";
+        $params = [];
+        if ($statusFilter !== 'all') {
+            $sql .= " WHERE cs.status = ?";
+            $params[] = $statusFilter;
+        }
+        $sql .= " ORDER BY cs.status='due' DESC, cs.created_at DESC LIMIT 500";
+        $rows = ORM::for_table('tbl_credit_sales')->raw_query($sql, $params)->find_array();
+
+        // Totals across the current filter view.
+        $totalDue  = ORM::for_table('tbl_credit_sales')->where('status','due')
+                        ->select_expr('COALESCE(SUM(amount),0)','t')->find_one();
+        $totalPaid = ORM::for_table('tbl_credit_sales')->where('status','paid')
+                        ->select_expr('COALESCE(SUM(amount),0)','t')->find_one();
+
+        $ui->assign('rows', $rows);
+        $ui->assign('statusFilter', $statusFilter);
+        $ui->assign('totalDue',  $totalDue ? (float) $totalDue['t']  : 0);
+        $ui->assign('totalPaid', $totalPaid ? (float) $totalPaid['t'] : 0);
+        $ui->display('customers-credits.tpl');
+        break;
+
+    case 'credit-paid':
+        // Mark a credit-sale row as paid. Routes: customers/credit-paid/{credit_id}
+        $creditId = (int) ($routes['2'] ?? 0);
+        $cs = ORM::for_table('tbl_credit_sales')->find_one($creditId);
+        if (!$cs) {
+            r2(U . 'customers/list', 'e', 'Credit sale not found');
+        }
+        $custId = (int) $cs['customer_id'];
+        if ($cs['status'] !== 'paid') {
+            $cs->status  = 'paid';
+            $cs->paid_at = date('Y-m-d H:i:s');
+            $cs->save();
+            _log('Credit #' . $creditId . ' (' . $cs['username'] . ', '
+                . $cs['plan_name'] . ', ' . $cs['amount'] . ' BDT) marked paid by '
+                . ($admin['username'] ?? '?'), 'User', $custId);
+        }
+        r2(U . 'customers/billing/' . $custId, 's', 'Credit marked as paid');
         break;
 
     default:

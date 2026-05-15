@@ -71,5 +71,23 @@ foreach($tmp as $plan){
 $ui->assign('stocks',$stocks);
 $ui->assign('plans',$plans);
 
+// Outstanding credit (lifetime) — sum of tbl_credit_sales rows still status='due'.
+// Guard against the table being absent on installs that haven't migrated yet.
+$credit_due_total = 0;
+$credit_due_count = 0;
+try {
+    $row = ORM::for_table('tbl_credit_sales')
+        ->where('status', 'due')
+        ->select_expr('COALESCE(SUM(amount),0)', 'total')
+        ->select_expr('COUNT(*)', 'cnt')
+        ->find_one();
+    if ($row) {
+        $credit_due_total = (float) $row['total'];
+        $credit_due_count = (int)   $row['cnt'];
+    }
+} catch (Throwable $e) { /* table may not exist yet */ }
+$ui->assign('credit_due_total', $credit_due_total);
+$ui->assign('credit_due_count', $credit_due_count);
+
 run_hook('view_dashboard'); #HOOK
 $ui->display('dashboard.tpl');

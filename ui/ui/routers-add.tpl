@@ -52,6 +52,41 @@
                             <p class="help-block">{Lang::T('Explain Coverage of router')}</p>
                         </div>
                     </div>
+
+                    <hr>
+                    <h4 style="margin-left:15px">{Lang::T('Secondary Router (Failover)')}</h4>
+                    <p class="help-block" style="margin-left:15px">{Lang::T('Used automatically when the primary is unreachable, and selectable from Remote Login.')}</p>
+
+                    <div class="form-group">
+                        <label class="col-md-2 control-label">{Lang::T('Secondary Status')}</label>
+                        <div class="col-md-10">
+                            <label class="radio-inline">
+                                <input type="radio" name="secondary_enabled" value="1"> Enable
+                            </label>
+                            <label class="radio-inline">
+                                <input type="radio" checked name="secondary_enabled" value="0"> Disable
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-md-2 control-label">{Lang::T('Secondary IP')}</label>
+                        <div class="col-md-6">
+                            <input type="text" placeholder="192.168.88.2:8728" class="form-control" id="secondary_ip_address" name="secondary_ip_address">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-md-2 control-label">{Lang::T('Secondary Username')}</label>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="secondary_username" name="secondary_username">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-md-2 control-label">{Lang::T('Secondary Secret')}</label>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="secondary_password" name="secondary_password">
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <div class="col-lg-offset-2 col-lg-10">
                             <button class="btn btn-primary waves-effect waves-light"
