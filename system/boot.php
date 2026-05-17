@@ -127,6 +127,91 @@ if (empty($config['schema_credit_sales_v1'])) {
     $config['schema_credit_sales_v1'] = '1';
 }
 
+// OLT monitoring tables.
+if (empty($config['schema_olt_monitoring_v1'])) {
+    $db = ORM::get_db();
+
+    // Main OLT table
+    $exists = $db->query(
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_olt'"
+    )->fetchColumn();
+    if (!$exists) {
+        $db->exec("CREATE TABLE `tbl_olt` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `name` VARCHAR(64) NOT NULL,
+            `ip_address` VARCHAR(45) NOT NULL,
+            `type` VARCHAR(32) DEFAULT 'media',
+            `snmp_community` VARCHAR(64) DEFAULT 'public',
+            `snmp_version` VARCHAR(8) DEFAULT '2c',
+            `web_url` VARCHAR(255) DEFAULT NULL,
+            `web_user` VARCHAR(64) DEFAULT NULL,
+            `web_pass` VARCHAR(128) DEFAULT NULL,
+            `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+            `last_polled` DATETIME DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_enabled` (`enabled`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    // ONU registry (current state)
+    $exists = $db->query(
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_olt_onus'"
+    )->fetchColumn();
+    if (!$exists) {
+        $db->exec("CREATE TABLE `tbl_olt_onus` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `olt_id` INT UNSIGNED NOT NULL,
+            `pon_port` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+            `onu_id` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+            `serial_number` VARCHAR(32) DEFAULT NULL,
+            `mac_address` VARCHAR(17) DEFAULT NULL,
+            `customer_id` INT UNSIGNED DEFAULT NULL,
+            `description` VARCHAR(128) DEFAULT NULL,
+            `status` VARCHAR(16) DEFAULT 'unknown',
+            `rx_power` DECIMAL(6,2) DEFAULT NULL COMMENT 'dBm',
+            `olt_rx_power` DECIMAL(6,2) DEFAULT NULL COMMENT 'dBm',
+            `distance` INT UNSIGNED DEFAULT NULL COMMENT 'meters',
+            `last_seen` DATETIME DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY `uk_olt_port_onu` (`olt_id`, `pon_port`, `onu_id`),
+            INDEX `idx_customer` (`customer_id`),
+            INDEX `idx_status` (`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    // ONU samples (historical data)
+    $exists = $db->query(
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_olt_onu_samples'"
+    )->fetchColumn();
+    if (!$exists) {
+        $db->exec("CREATE TABLE `tbl_olt_onu_samples` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `olt_id` INT UNSIGNED NOT NULL,
+            `pon_port` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+            `onu_id` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+            `status` VARCHAR(16) DEFAULT 'unknown',
+            `rx_power` DECIMAL(6,2) DEFAULT NULL COMMENT 'dBm',
+            `olt_rx_power` DECIMAL(6,2) DEFAULT NULL COMMENT 'dBm',
+            `distance` INT UNSIGNED DEFAULT NULL,
+            `ts` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_ts` (`ts`),
+            INDEX `idx_olt_port_onu` (`olt_id`, `pon_port`, `onu_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    $flag = ORM::for_table('tbl_appconfig')->where('setting','schema_olt_monitoring_v1')->find_one();
+    if (!$flag) {
+        $flag = ORM::for_table('tbl_appconfig')->create();
+        $flag->setting = 'schema_olt_monitoring_v1';
+    }
+    $flag->value = '1';
+    $flag->save();
+    $config['schema_olt_monitoring_v1'] = '1';
+}
+
 // Web Login URLs per endpoint.
 if (empty($config['schema_router_webfig_url_v1'])) {
     $db = ORM::get_db();

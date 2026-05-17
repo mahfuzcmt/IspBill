@@ -175,6 +175,10 @@
                                         href="{$_url}routers/list">{$_L['Routers']}</a></li>
                                 <li {if $_routes[0] eq 'pool' and $_routes[1] eq 'list'}class="active" {/if}><a
                                         href="{$_url}pool/list">{$_L['Pool']}</a></li>
+                                <li {if $_routes[0] eq 'olt'}class="active" {/if}><a
+                                        href="{$_url}olt"><i class="ion ion-cube"></i> OLT Dashboard</a></li>
+                                <li {if $_routes[0] eq 'wan'}class="active" {/if}><a
+                                        href="{$_url}wan"><i class="ion ion-stats-bars"></i> WAN Dashboard</a></li>
                                 {$_MENU_NETWORK}
                             </ul>
                         </li>

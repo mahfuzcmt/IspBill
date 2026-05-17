@@ -228,11 +228,11 @@ class Response extends Message
 
     /**
      * Sets the response type.
-     * 
+     *
      * Sets the response type. Valid values are the TYPE_* constants.
-     * 
+     *
      * @param string $type The new response type.
-     * 
+     *
      * @return $this The response object.
      * @see getType()
      */
@@ -246,12 +246,11 @@ class Response extends Message
             $this->_type = $type;
             return $this;
         default:
-            throw new UnexpectedValueException(
-                'Unrecognized response type.',
-                UnexpectedValueException::CODE_RESPONSE_TYPE_UNKNOWN,
-                null,
-                $type
-            );
+            // RouterOS 7.x may send new response types - treat unknown as data
+            // to maintain compatibility. Log for debugging if needed.
+            error_log("RouterOS API: Unknown response type '$type', treating as data");
+            $this->_type = self::TYPE_DATA;
+            return $this;
         }
     }
 
