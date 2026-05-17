@@ -149,8 +149,10 @@ switch ($action) {
 
             if(!$config['radius_mode']){
                 $mikrotik = Mikrotik::info($routers);
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::addHotspotPlan($client, $name, $sharedusers, $rate);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
+                    try { Mikrotik::addHotspotPlan($client, $name, $sharedusers, $rate); } catch (Throwable $e) {}
+                }
             }
 
             $d = ORM::for_table('tbl_plans')->create();
@@ -228,8 +230,10 @@ switch ($action) {
 
             if(!$config['radius_mode']){
                 $mikrotik = Mikrotik::info($routers);
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::setHotspotPlan($client, $name, $sharedusers, $rate);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
+                    try { Mikrotik::setHotspotPlan($client, $name, $sharedusers, $rate); } catch (Throwable $e) {}
+                }
             }
 
             $d->name_plan = $name;
@@ -377,8 +381,10 @@ switch ($action) {
 
             if(!$config['radius_mode']){
                 $mikrotik = Mikrotik::info($routers);
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::addPpoePlan($client, $name, $pool, $rate);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
+                    try { Mikrotik::addPpoePlan($client, $name, $pool, $rate); } catch (Throwable $e) {}
+                }
             }
 
             $d = ORM::for_table('tbl_plans')->create();
@@ -443,8 +449,10 @@ switch ($action) {
 
             if(!$config['radius_mode']){
                 $mikrotik = Mikrotik::info($routers);
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::setPpoePlan($client, $name, $pool, $rate);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
+                    try { Mikrotik::setPpoePlan($client, $name, $pool, $rate); } catch (Throwable $e) {}
+                }
             }
 
             $d->name_plan = $name;

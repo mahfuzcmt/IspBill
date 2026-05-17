@@ -34,13 +34,15 @@ if ($username === '' && $lookupIp !== '') {
         $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
         if ($rt) {
             require_once __DIR__ . '/../autoload/PEAR2/Autoload.php';
-            $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
-            $req = new PEAR2\Net\RouterOS\Request('/ppp/active/print');
-            $req->setArgument('.proplist', 'name,address');
-            $req->setQuery(PEAR2\Net\RouterOS\Query::where('address', $lookupIp));
-            foreach ($client->sendSync($req) as $r) {
-                if ($r->getType() === PEAR2\Net\RouterOS\Response::TYPE_DATA) {
-                    $username = $r->getProperty('name'); break;
+            $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
+            if ($client) {
+                $req = new PEAR2\Net\RouterOS\Request('/ppp/active/print');
+                $req->setArgument('.proplist', 'name,address');
+                $req->setQuery(PEAR2\Net\RouterOS\Query::where('address', $lookupIp));
+                foreach ($client->sendSync($req) as $r) {
+                    if ($r->getType() === PEAR2\Net\RouterOS\Response::TYPE_DATA) {
+                        $username = $r->getProperty('name'); break;
+                    }
                 }
             }
         }

@@ -120,9 +120,10 @@ switch ($action) {
         $routerReachable = false;
         try {
             $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
-            if ($rt) {
-                $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
-
+            // tryClient() returns null on failure; getClient() would die() and
+            // replace the page body with "Unable to connect to the router."
+            $client = $rt ? Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']) : null;
+            if ($client) {
                 $req = new RouterOS\Request('/ppp/secret/print');
                 $req->setArgument('.proplist', 'name,disabled,profile,last-logged-out');
                 foreach ($client->sendSync($req) as $r) {
@@ -258,8 +259,8 @@ switch ($action) {
                 $mikrotik = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
             }
             if ($mikrotik) {
-                try {
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
                     if ($latest['type'] === 'Hotspot') {
                         try { Mikrotik::removeHotspotUser($client, $d['username']); } catch (Throwable $e) {}
                         try { Mikrotik::removeHotspotActiveUser($client, $d['username']); } catch (Throwable $e) {}
@@ -267,8 +268,8 @@ switch ($action) {
                         try { Mikrotik::removePpoeUser($client, $d['username']); } catch (Throwable $e) {}
                         try { Mikrotik::removePpoeActive($client, $d['username']); } catch (Throwable $e) {}
                     }
-                } catch (Throwable $e) {
-                    $routerWarning = ' (router push skipped: ' . $e->getMessage() . ')';
+                } else {
+                    $routerWarning = ' (router unreachable, router cleanup skipped)';
                 }
             }
         }
@@ -334,8 +335,12 @@ switch ($action) {
 
             // Push to Mikrotik
             if ($pushToRouter && $mikrotik && !$config['radius_mode']) {
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if (!$client) {
+                    r2(U . 'customers/list', 'e',
+                        'Customer ' . $username . ' created in DB, but router unreachable — re-push from the Billing UI when the router is back.');
+                }
                 try {
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
                     $custData = ['username' => $username, 'password' => $password];
                     if ($service === 'PPPoE') {
                         Mikrotik::addPpoeUser($client, $plan, $custData);
@@ -344,7 +349,6 @@ switch ($action) {
                     }
                 } catch (Throwable $e) {
                     // Don't roll back the DB row — the admin can re-push from the Billing UI.
-                    // Surface the warning via the flash message.
                     r2(U . 'customers/list', 'e',
                         'Customer ' . $username . ' created in DB, but router push failed: ' . $e->getMessage());
                 }
@@ -542,9 +546,10 @@ switch ($action) {
         // ---- Push changes to Mikrotik (best-effort, individual try/catch) ----
         $routerWarning = '';
         if ($pushToRouter && $mikrotik && empty($config['radius_mode']) && $service === 'PPPoE') {
-            try {
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-
+            $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+            if (!$client) {
+                $routerWarning = ' (router unreachable, edits not pushed)';
+            } else try {
                 // Username changed → recreate the secret with the new name
                 if ($oldUsername !== $username) {
                     try { Mikrotik::removePpoeUser($client, $oldUsername); } catch (Throwable $e) {}
@@ -656,7 +661,8 @@ switch ($action) {
         try {
             $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
             if (!$rt) { throw new Exception('No router configured'); }
-            $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
+            $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
+            if (!$client) { throw new Exception('Router unreachable (' . $rt['ip_address'] . ')'); }
 
             // 2) PPP secret
             try {
@@ -858,9 +864,8 @@ switch ($action) {
             // "Unrecognized response type" when a query returns no data (e.g. user offline).
             $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
             if ($rt) {
-                try {
-                    $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
-
+                $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
+                if ($client) try {
                     try {
                         $req = new RouterOS\Request('/queue/simple/print');
                         $req->setArgument('stats', 'yes');
@@ -923,7 +928,8 @@ switch ($action) {
         try {
             $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
             if (!$rt) { throw new Exception('no enabled router'); }
-            $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
+            $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
+            if (!$client) { throw new Exception('router unreachable (' . $rt['ip_address'] . ')'); }
 
             $custMap = [];
             foreach (ORM::for_table('tbl_customers')->find_many() as $c) {
@@ -1134,8 +1140,11 @@ switch ($action) {
 
         // Sync the router — only for PPPoE in this iteration; Hotspot would be similar
         if (!$config['radius_mode'] && $serviceType === 'PPPoE') {
+            $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+            if (!$client) {
+                r2(U . 'customers/billing/' . $id, 'e', 'DB updated, but router unreachable — router sync skipped.');
+            }
             try {
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
                 // (a) Plan migration → swap profile if changed
                 if ($oldPlanName !== $newPlan['name_plan']) {
                     Mikrotik::setPpoeUserProfile($client, $c['username'], $newPlan['name_plan']);

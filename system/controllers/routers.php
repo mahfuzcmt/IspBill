@@ -125,7 +125,9 @@ switch ($action) {
         }
 
         if(!$config['radius_mode']){
-            Mikrotik::getClient($ip_address,$username,$password);
+            if (!Mikrotik::tryClient($ip_address,$username,$password)) {
+                $msg .= 'Cannot connect to router at ' . htmlspecialchars($ip_address) . ' with the supplied credentials.<br>';
+            }
         }
 
         if($msg == ''){
@@ -201,7 +203,9 @@ switch ($action) {
 
 
         if(!$config['radius_mode']){
-            Mikrotik::getClient($ip_address,$username,$password);
+            if (!Mikrotik::tryClient($ip_address,$username,$password)) {
+                $msg .= 'Cannot connect to router at ' . htmlspecialchars($ip_address) . ' with the supplied credentials.<br>';
+            }
         }
 
 

@@ -62,13 +62,18 @@ switch ($action) {
         $d = ORM::for_table('tbl_pool')->find_one($id);
         $mikrotik = Mikrotik::info($d['routers']);
         if ($d) {
+            $warn = '';
             if (!$config['radius_mode']) {
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::removePool($client, $d['pool_name']);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
+                    try { Mikrotik::removePool($client, $d['pool_name']); } catch (Throwable $e) {}
+                } else {
+                    $warn = ' (router unreachable, pool removed from DB only)';
+                }
             }
             $d->delete();
 
-            r2(U . 'pool/list', 's', $_L['Delete_Successfully']);
+            r2(U . 'pool/list', 's', $_L['Delete_Successfully'] . $warn);
         }
         break;
 
@@ -91,9 +96,14 @@ switch ($action) {
         }
         $mikrotik = Mikrotik::info($routers);
         if ($msg == '') {
+            $warn = '';
             if (!$config['radius_mode']) {
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::addPool($client, $name, $ip_address);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
+                    try { Mikrotik::addPool($client, $name, $ip_address); } catch (Throwable $e) {}
+                } else {
+                    $warn = ' (router unreachable, pool added to DB only)';
+                }
             }
 
             $b = ORM::for_table('tbl_pool')->create();
@@ -102,7 +112,7 @@ switch ($action) {
             $b->routers = $routers;
             $b->save();
 
-            r2(U . 'pool/list', 's', $_L['Created_Successfully']);
+            r2(U . 'pool/list', 's', $_L['Created_Successfully'] . $warn);
         } else {
             r2(U . 'pool/add', 'e', $msg);
         }
@@ -128,16 +138,21 @@ switch ($action) {
 
         $mikrotik = Mikrotik::info($routers);
         if ($msg == '') {
+            $warn = '';
             if (!$config['radius_mode']) {
-                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                Mikrotik::setPool($client, $d['pool_name'], $ip_address);
+                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                if ($client) {
+                    try { Mikrotik::setPool($client, $d['pool_name'], $ip_address); } catch (Throwable $e) {}
+                } else {
+                    $warn = ' (router unreachable, pool updated in DB only)';
+                }
             }
 
             $d->range_ip = $ip_address;
             $d->routers = $routers;
             $d->save();
 
-            r2(U . 'pool/list', 's', $_L['Updated_Successfully']);
+            r2(U . 'pool/list', 's', $_L['Updated_Successfully'] . $warn);
         } else {
             r2(U . 'pool/edit/' . $id, 'e', $msg);
         }

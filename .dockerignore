@@ -1,0 +1,32 @@
+# Keep the build context small and don't leak dev-only / secret-adjacent files.
+.git
+.gitignore
+.idea
+.vscode
+.claude
+.deploy
+
+# Local DB dumps
+*.sql
+*.sql.gz
+*.sql.bz2
+*.dump
+
+# Logs / runtime cache
+*.log
+logs/
+system/cache/*
+ui/compiled/*
+ui/cache/*
+system/uploads/*
+
+# Editor noise
+*.swp
+*.swo
+*.bak
+*.tmp
+*.orig
+*.rej
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -43,9 +43,11 @@ switch ($action) {
 						$mikrotik = Mikrotik::info($c['routers']);
 						if($c['type'] == 'Hotspot'){
                             if(!$config['radius_mode']){
-                                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                                Mikrotik::setHotspotUser($client,$c['username'],$npass);
-                                Mikrotik::removeHotspotActiveUser($client,$user['username']);
+                                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                                if ($client) {
+                                    try { Mikrotik::setHotspotUser($client,$c['username'],$npass); } catch (Throwable $e) {}
+                                    try { Mikrotik::removeHotspotActiveUser($client,$user['username']); } catch (Throwable $e) {}
+                                }
                             }
 							$d->password = $npass;
 							$d->save();
@@ -57,9 +59,11 @@ switch ($action) {
 
 						}else{
                             if(!$config['radius_mode']){
-                                $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                                Mikrotik::setPpoeUser($client,$c['username'],$npass);
-                                Mikrotik::removePpoeActive($client,$user['username']);
+                                $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                                if ($client) {
+                                    try { Mikrotik::setPpoeUser($client,$c['username'],$npass); } catch (Throwable $e) {}
+                                    try { Mikrotik::removePpoeActive($client,$user['username']); } catch (Throwable $e) {}
+                                }
                             }
 							$d->password = $npass;
 							$d->save();

@@ -50,9 +50,11 @@ class Package
         if ($p['type'] == 'Hotspot') {
             if ($b) {
                 if (!$_c['radius_mode']) {
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    Mikrotik::removeHotspotUser($client, $c['username']);
-                    Mikrotik::addHotspotUser($client, $p, $c);
+                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    if ($client) {
+                        try { Mikrotik::removeHotspotUser($client, $c['username']); } catch (Throwable $e) {}
+                        try { Mikrotik::addHotspotUser($client, $p, $c); } catch (Throwable $e) {}
+                    }
                 }
 
                 $b->customer_id = $id_customer;
@@ -83,8 +85,10 @@ class Package
                 $t->save();
             } else {
                 if (!$_c['radius_mode']) {
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    Mikrotik::addHotspotUser($client, $p, $c);
+                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    if ($client) {
+                        try { Mikrotik::addHotspotUser($client, $p, $c); } catch (Throwable $e) {}
+                    }
                 }
 
                 $d = ORM::for_table('tbl_user_recharges')->create();
@@ -124,9 +128,11 @@ class Package
 
             if ($b) {
                 if (!$_c['radius_mode']) {
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    Mikrotik::removePpoeUser($client, $c['username']);
-                    Mikrotik::addPpoeUser($client, $p, $c);
+                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    if ($client) {
+                        try { Mikrotik::removePpoeUser($client, $c['username']); } catch (Throwable $e) {}
+                        try { Mikrotik::addPpoeUser($client, $p, $c); } catch (Throwable $e) {}
+                    }
                 }
 
                 $b->customer_id = $id_customer;
@@ -157,8 +163,10 @@ class Package
                 $t->save();
             } else {
                 if (!$_c['radius_mode']) {
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    Mikrotik::addPpoeUser($client, $p, $c);
+                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    if ($client) {
+                        try { Mikrotik::addPpoeUser($client, $p, $c); } catch (Throwable $e) {}
+                    }
                 }
 
                 $d = ORM::for_table('tbl_user_recharges')->create();

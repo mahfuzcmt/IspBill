@@ -14,7 +14,9 @@ $ui->assign('_admin', $admin);
 $action = isset($routes['1']) ? $routes['1'] : 'index';
 
 if ($action === 'data') {
-    header('Content-Type: application/json');
+    // Buffer everything so any stray warning/notice/echo from ORM, the
+    // RouterOS client, or autoloaded code can't corrupt the JSON body.
+    ob_start();
     $minutes = isset($_GET['minutes']) ? max(5, min(10080, (int)$_GET['minutes'])) : 360;
     $iface   = isset($_GET['iface']) ? $_GET['iface'] : null;
     $out = ['minutes' => $minutes, 'samples' => [], 'live' => null, 'iface' => $iface, 'error' => null];
@@ -41,12 +43,13 @@ if ($action === 'data') {
             ];
         }
 
-        // Live snapshot
+        // Live snapshot — tryClient() returns null on connection failure
+        // (getClient() would die() and corrupt the JSON response).
         $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
         if ($rt) {
-            $client = Mikrotik::getClient($rt['ip_address'], $rt['username'], $rt['password']);
+            $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
             $name = $iface ?: 'ether1-Sterlink Uplink';
-            try {
+            if ($client) try {
                 $req = new RouterOS\Request('/interface/monitor-traffic');
                 $req->setArgument('interface', $name);
                 $req->setArgument('once', '');
@@ -63,6 +66,9 @@ if ($action === 'data') {
             } catch (Throwable $e) {}
         }
     } catch (Throwable $e) { $out['error'] = $e->getMessage(); }
+    // Discard any stray output captured during the try block, then emit JSON.
+    if (ob_get_level() > 0) ob_end_clean();
+    header('Content-Type: application/json');
     echo json_encode($out);
     exit;
 }

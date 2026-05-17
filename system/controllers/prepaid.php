@@ -105,9 +105,11 @@ switch ($action) {
             if ($type == 'Hotspot') {
                 if ($b) {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::removeHotspotUser($client,$c['username']);
-                        Mikrotik::addHotspotUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::removeHotspotUser($client,$c['username']); } catch (Throwable $e) {}
+                            try { Mikrotik::addHotspotUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $b->customer_id = $id_customer;
@@ -138,8 +140,10 @@ switch ($action) {
                     $t->save();
                 } else {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::addHotspotUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::addHotspotUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $d = ORM::for_table('tbl_user_recharges')->create();
@@ -177,9 +181,11 @@ switch ($action) {
 
                 if ($b) {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::removePpoeUser($client,$c['username']);
-                        Mikrotik::addPpoeUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::removePpoeUser($client,$c['username']); } catch (Throwable $e) {}
+                            try { Mikrotik::addPpoeUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $b->customer_id = $id_customer;
@@ -210,8 +216,10 @@ switch ($action) {
                     $t->save();
                 } else {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::addPpoeUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::addPpoeUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $d = ORM::for_table('tbl_user_recharges')->create();
@@ -316,15 +324,19 @@ switch ($action) {
             run_hook('delete_customer_active_plan'); #HOOK
             if ($d['type'] == 'Hotspot') {
                 if(!$config['radius_mode']){
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    Mikrotik::removeHotspotUser($client,$c['username']);
+                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    if ($client) {
+                        try { Mikrotik::removeHotspotUser($client,$c['username']); } catch (Throwable $e) {}
+                    }
                 }
 
                 $d->delete();
             } else {
                 if(!$config['radius_mode']){
-                    $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    Mikrotik::removePpoeUser($client,$c['username']);
+                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                    if ($client) {
+                        try { Mikrotik::removePpoeUser($client,$c['username']); } catch (Throwable $e) {}
+                    }
                 }
                 $d->delete();
             }
@@ -505,12 +517,11 @@ switch ($action) {
             $client = null;
             $pushErrors = [];
             if ($planObj && $mikrotik && empty($config['radius_mode'])) {
-                try {
-                    $client = Mikrotik::getClient(
-                        $mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']
-                    );
-                } catch (Throwable $e) {
-                    $pushErrors[] = 'Connect: ' . $e->getMessage();
+                $client = Mikrotik::tryClient(
+                    $mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']
+                );
+                if (!$client) {
+                    $pushErrors[] = 'Connect: router unreachable';
                 }
             }
 
@@ -583,13 +594,13 @@ switch ($action) {
                     $mikrotik = ORM::for_table('tbl_routers')->find_one((int) $d['routers']);
                 }
                 if ($mikrotik) {
-                    try {
-                        $client = Mikrotik::getClient(
-                            $mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']
-                        );
+                    $client = Mikrotik::tryClient(
+                        $mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']
+                    );
+                    if ($client) {
                         try { Mikrotik::removeHotspotUser($client, $d['code']); } catch (Throwable $e) {}
                         try { Mikrotik::removeHotspotActiveUser($client, $d['code']); } catch (Throwable $e) {}
-                    } catch (Throwable $e) {}
+                    }
                 }
             }
             $d->delete();
@@ -641,9 +652,11 @@ switch ($action) {
             if ($v1['type'] == 'Hotspot') {
                 if ($b) {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::removeHotspotUser($client,$c['username']);
-                        Mikrotik::addHotspotUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::removeHotspotUser($client,$c['username']); } catch (Throwable $e) {}
+                            try { Mikrotik::addHotspotUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $b->customer_id = $user;
@@ -674,8 +687,10 @@ switch ($action) {
                     $t->save();
                 } else {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::addHotspotUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::addHotspotUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $d = ORM::for_table('tbl_user_recharges')->create();
@@ -718,9 +733,11 @@ switch ($action) {
             } else {
                 if ($b) {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::removePpoeUser($client,$c['username']);
-                        Mikrotik::addPpoeUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::removePpoeUser($client,$c['username']); } catch (Throwable $e) {}
+                            try { Mikrotik::addPpoeUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $b->customer_id = $user;
@@ -751,8 +768,10 @@ switch ($action) {
                     $t->save();
                 } else {
                     if(!$config['radius_mode']){
-                        $client = Mikrotik::getClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        Mikrotik::addPpoeUser($client,$p,$c);
+                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
+                        if ($client) {
+                            try { Mikrotik::addPpoeUser($client,$p,$c); } catch (Throwable $e) {}
+                        }
                     }
 
                     $d = ORM::for_table('tbl_user_recharges')->create();

@@ -73,10 +73,14 @@ foreach ($d as $ds) {
             $m = ORM::for_table('tbl_routers')->where('name', $ds['routers'])->find_one();
 
             if (!$_c['radius_mode']) {
-                $client = Mikrotik::getClient($m['ip_address'], $m['username'], $m['password']);
-                Mikrotik::setHotspotLimitUptime($client, $c['username']);
-                Mikrotik::removeHotspotActiveUser($client, $c['username']);
-                Message::sendExpiredNotification($c['phonenumber'], $c['fullname'], $u['namebp'], $textExpired, $config['user_notification_expired']);
+                $client = Mikrotik::tryClient($m['ip_address'], $m['username'], $m['password']);
+                if ($client) {
+                    try { Mikrotik::setHotspotLimitUptime($client, $c['username']); } catch (Throwable $e) { echo "  ROUTER push failed: " . $e->getMessage() . "\r\n"; }
+                    try { Mikrotik::removeHotspotActiveUser($client, $c['username']); } catch (Throwable $e) {}
+                } else {
+                    echo "  ROUTER unreachable, hotspot expiry not pushed\r\n";
+                }
+                try { Message::sendExpiredNotification($c['phonenumber'], $c['fullname'], $u['namebp'], $textExpired, $config['user_notification_expired']); } catch (Throwable $e) {}
             }
             //update database user dengan status off
             $u->status = 'off';
@@ -93,8 +97,10 @@ foreach ($d as $ds) {
             $m = ORM::for_table('tbl_routers')->where('name', $ds['routers'])->find_one();
 
             if (empty($config['radius_mode'])) {
-                try {
-                    $client = Mikrotik::getClient($m['ip_address'], $m['username'], $m['password']);
+                $client = Mikrotik::tryClient($m['ip_address'], $m['username'], $m['password']);
+                if (!$client) {
+                    echo "  ROUTER unreachable, suspension not pushed for " . $c['username'] . "\r\n";
+                } else try {
                     // NetPulse: move expired PPPoE users to the "Suspended" profile rather
                     // than disabling the secret. The Suspended profile adds the client's IP
                     // to address-list "expired-users", and a firewall NAT rule redirects
