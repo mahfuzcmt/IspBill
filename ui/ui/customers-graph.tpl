@@ -113,7 +113,7 @@ var GRAPH_USER = '{$c.username|escape:"javascript"}';
 var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER);
 {literal}
 (function () {
-    var LIVE_POLL_MS = 3000;
+    var LIVE_POLL_MS = 1000;
     var rangeMinutes = 360;
     var chart;
 
@@ -155,14 +155,14 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
                 datasets: [
                     {
                         label: 'Download (Mbps)',
-                        data: dataIn,
+                        data: dataOut,
                         borderColor: '#16A34A',
                         backgroundColor: 'rgba(22,163,74,0.15)',
                         borderWidth: 2, tension: 0.25, fill: true, pointRadius: 0,
                     },
                     {
                         label: 'Upload (Mbps)',
-                        data: dataOut,
+                        data: dataIn,
                         borderColor: '#0F2742',
                         backgroundColor: 'rgba(15,39,66,0.10)',
                         borderWidth: 2, tension: 0.25, fill: true, pointRadius: 0,

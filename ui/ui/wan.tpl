@@ -78,7 +78,7 @@
 var WAN_DATA_URL = '{$_url}wan/data';
 {literal}
 (function () {
-    var POLL_MS = 3000;
+    var POLL_MS = 1000;
     var rangeMin = 360;
     var chart, ifaceSel = document.getElementById('w-iface'), inFlight = false;
 

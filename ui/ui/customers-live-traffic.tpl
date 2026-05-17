@@ -45,7 +45,7 @@
 var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
 {literal}
 (function () {
-    var POLL_MS = 3000;
+    var POLL_MS = 1000;
     var prev = {};   // username -> {bytesIn, bytesOut, ts}
 
     function fmtBytes(n) {
@@ -84,23 +84,24 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
         data.sessions.sort(function (a, b) { return (a.username || '').localeCompare(b.username || ''); });
         data.sessions.forEach(function (s) {
             // Prefer router-provided rate (real-time) over client delta.
-            var rd = (typeof s.rateIn  === 'number') ? s.rateIn  : 0;
-            var ru = (typeof s.rateOut === 'number') ? s.rateOut : 0;
+            // queue RX = customer upload, queue TX = customer download
+            var rd = (typeof s.rateOut === 'number') ? s.rateOut : 0;  // Download = queue TX
+            var ru = (typeof s.rateIn  === 'number') ? s.rateIn  : 0;  // Upload = queue RX
             // Fallback delta if router didn't give a rate.
             if (!rd && !ru) {
                 var p = prev[s.username];
                 if (p && p.ts) {
                     var dt = (now - p.ts) / 1000;
                     if (dt > 0) {
-                        rd = Math.max(0, (s.bytesIn - p.bytesIn) / dt);
-                        ru = Math.max(0, (s.bytesOut - p.bytesOut) / dt);
+                        rd = Math.max(0, (s.bytesOut - p.bytesOut) / dt);  // Download = bytesOut delta
+                        ru = Math.max(0, (s.bytesIn - p.bytesIn) / dt);   // Upload = bytesIn delta
                     }
                 }
             }
             var rateDown = fmtRate(rd), rateUp = fmtRate(ru);
             totalDownRate += rd; totalUpRate += ru;
             prev[s.username] = { bytesIn: s.bytesIn, bytesOut: s.bytesOut, ts: now };
-            totalDown += s.bytesIn; totalUp += s.bytesOut;
+            totalDown += s.bytesOut; totalUp += s.bytesIn;  // bytesOut=download, bytesIn=upload
             rows.push(
                 '<tr>' +
                 '<td><strong>' + (s.username || '') + '</strong></td>' +
@@ -110,8 +111,8 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
                 '<td>' + (s.uptime || '') + '</td>' +
                 '<td class="text-right"><strong>' + rateDown + '</strong></td>' +
                 '<td class="text-right"><strong>' + rateUp + '</strong></td>' +
-                '<td class="text-right">' + fmtBytes(s.bytesIn) + '</td>' +
                 '<td class="text-right">' + fmtBytes(s.bytesOut) + '</td>' +
+                '<td class="text-right">' + fmtBytes(s.bytesIn) + '</td>' +
                 '</tr>'
             );
         });
