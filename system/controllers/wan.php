@@ -48,7 +48,7 @@ if ($action === 'data') {
         $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
         if ($rt) {
             $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
-            $name = $iface ?: 'ether1-Sterlink Uplink';
+            $name = $iface ?: 'ether2-Starlink';
             if ($client) try {
                 $req = new RouterOS\Request('/interface/monitor-traffic');
                 $req->setArgument('interface', $name);

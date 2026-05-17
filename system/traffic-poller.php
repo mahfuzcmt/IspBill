@@ -103,7 +103,7 @@ try {
     // -----------------------------------------------------------------
     $wanIface = isset($GLOBALS['config']['wan_interface']) && $GLOBALS['config']['wan_interface']
                 ? $GLOBALS['config']['wan_interface']
-                : 'ether1-Sterlink Uplink';
+                : 'ether2-Starlink';
 
     // 3a. Current rx-bps / tx-bps via /interface/monitor-traffic once=yes
     $wanRxBps = 0; $wanTxBps = 0; $wanRxPps = 0; $wanTxPps = 0;
