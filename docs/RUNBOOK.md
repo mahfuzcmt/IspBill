@@ -129,6 +129,15 @@ UPDATE tbl_routers SET ip_address='10.99.0.2', username='admin', password='<MT_A
 ```
 
 ### Firewall NAT rules (added by API, comment-tagged)
+
+> **Walled-garden (HTTPS coverage):** the rules below are the *original*
+> port-80-only redirect. A full walled-garden patch that also handles
+> HTTPS / QUIC / OS captive-portal probes lives in
+> [`walled-garden-patch.md`](./walled-garden-patch.md). When deployed,
+> it adds DNS sinkholing + 443 reject rules alongside the rules below
+> (the port-80 redirect is untouched). Roll back with the commands at
+> the bottom of that doc.
+
 ```
 # Forward HTTP from expired-users address-list to the notice proxy on the VPS
 /ip firewall nat add chain=dstnat protocol=tcp dst-port=80 \

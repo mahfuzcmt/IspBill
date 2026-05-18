@@ -67,11 +67,20 @@ $payNumber = isset($config['expiry_pay_number']) && $config['expiry_pay_number']
 $supportNumber = isset($config['expiry_support_number']) && $config['expiry_support_number'] !== ''
     ? $config['expiry_support_number'] : '01975585960';
 
+// Discourage caches / search indexers — this page is per-customer state and
+// changes the moment they recharge.
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('X-Robots-Tag: noindex, nofollow');
+header('Referrer-Policy: no-referrer');
+
 $ui->assign('username',       $username !== '' ? $username : 'Unknown');
 $ui->assign('customer',       $customer);
 $ui->assign('recharge',       $recharge);
 $ui->assign('pay_number',     $payNumber);
 $ui->assign('support_number', $supportNumber);
 $ui->assign('company',        isset($config['CompanyName']) ? $config['CompanyName'] : 'NetPulse');
+$ui->assign('logo_url',       '/ui/ui/images/logo.png');
 $ui->display('expired-notice.tpl');
 exit;

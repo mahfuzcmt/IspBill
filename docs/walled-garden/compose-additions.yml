@@ -1,0 +1,36 @@
+# Splice this service into /opt/phpnuxbill/docker-compose.yml under `services:`.
+#
+# Uses host network (same pattern as `router-proxy`) so it can bind directly
+# to 10.99.0.1:53 — the IP Mikrotik DNATs expired-users' DNS to.
+#
+# Pre-flight on the VPS:
+#   1. Make sure the host's systemd-resolved isn't using 0.0.0.0:53.
+#      Default Ubuntu binds it on 127.0.0.53 (loopback) only, which is fine.
+#      Verify with:    ss -lunp | grep :53
+#      If you see *:53 you'll need to set DNSStubListener=no in
+#      /etc/systemd/resolved.conf and `systemctl restart systemd-resolved`.
+#
+#   2. Confirm 10.99.0.1 exists on the wg0 interface:
+#      ip -br addr show wg0
+#
+#   3. After splicing:
+#      cd /opt/phpnuxbill && docker compose build dnsmasq && docker compose up -d dnsmasq
+#      ss -lunp | grep 10.99.0.1
+#      dig +short example.com @10.99.0.1   # → 10.99.0.1
+
+  dnsmasq:
+    build:
+      context: ./dnsmasq
+      dockerfile: Dockerfile
+    container_name: dnsmasq
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_BIND_SERVICE
+    volumes:
+      - ./dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nslookup example.com 10.99.0.1 | grep -q 10.99.0.1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
