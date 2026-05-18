@@ -130,13 +130,19 @@ UPDATE tbl_routers SET ip_address='10.99.0.2', username='admin', password='<MT_A
 
 ### Firewall NAT rules (added by API, comment-tagged)
 
-> **Walled-garden (HTTPS coverage):** the rules below are the *original*
-> port-80-only redirect. A full walled-garden patch that also handles
-> HTTPS / QUIC / OS captive-portal probes lives in
-> [`walled-garden-patch.md`](./walled-garden-patch.md). When deployed,
-> it adds DNS sinkholing + 443 reject rules alongside the rules below
-> (the port-80 redirect is untouched). Roll back with the commands at
-> the bottom of that doc.
+> **Walled-garden (HTTPS coverage) — DEPLOYED 2026-05-18:** in addition
+> to the port-80 redirect below, expired customers now get DNS sinkholed
+> to `10.99.0.1:53`, HTTPS (TCP 443) rejected with `tcp-reset` for fast
+> browser failure, and QUIC (UDP 443) rejected with `icmp-admin-prohibited`.
+> Live rules: `NetPulse-expired-dns-{udp,tcp}` (NAT) and
+> `NetPulse-expired-block-{https,quic}` (filter, top of forward chain).
+> Pre-existing `NetPulse-expired-{allow-notice-page,allow-DNS-*,drop-all}`
+> rules (rule IDs *B/*C/*D/*E) form a complementary filter layer — leave
+> them in place. The router-proxy nginx :8089 vhost now also handles OS
+> captive-portal probe paths (`/hotspot-detect.html`, `/generate_204`,
+> `/connecttest.txt`, etc.) returning 302 → /notice so phone "Sign in to
+> Wi-Fi" banners pop. Full deploy/rollback in
+> [`walled-garden-patch.md`](./walled-garden-patch.md).
 >
 > **Customer DNS logging (BTRC):** a follow-on patch logs every PPPoE
 > customer's DNS queries to a 7-day-rotated docker log via a second
