@@ -179,6 +179,9 @@
                                 <a href="{$_url}customers/graph/{$d['id']}" class="btn btn-success" style="margin-left:8px">
                                     <i class="fa fa-line-chart"></i> View Graph
                                 </a>
+                                <a href="{$_url}customers/browsing/{$d['id']}" class="btn btn-default" style="margin-left:8px">
+                                    <i class="fa fa-history"></i> Browsing History
+                                </a>
                             {/if}
                         </div>
                     </div>

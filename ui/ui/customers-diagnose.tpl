@@ -23,8 +23,9 @@
         <div class="panel panel-primary panel-hovered mb20">
             <div class="panel-heading">
                 Customer Diagnostics &mdash; {$c['username']}
-                <a href="{$_url}customers/edit/{$c['id']}" class="btn btn-warning btn-sm pull-right" style="margin-left:6px">Edit</a>
-                <a href="{$_url}customers/graph/{$c['id']}" class="btn btn-success btn-sm pull-right">Graph</a>
+                <a href="{$_url}customers/edit/{$c['id']}"     class="btn btn-warning btn-sm pull-right" style="margin-left:6px">Edit</a>
+                <a href="{$_url}customers/browsing/{$c['id']}" class="btn btn-default btn-sm pull-right" style="margin-left:6px">Browsing</a>
+                <a href="{$_url}customers/graph/{$c['id']}"    class="btn btn-success btn-sm pull-right">Graph</a>
             </div>
             <div class="panel-body">
 

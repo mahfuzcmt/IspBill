@@ -1244,6 +1244,154 @@ switch ($action) {
         r2(U . 'customers/billing/' . $custId, 's', 'Credit marked as paid');
         break;
 
+    case 'browsing':
+    case 'browsing-history':
+        // Per-customer DNS query history from the dnsmasq-resolver log file
+        // (/var/log/dnsmasq/queries.log + .1 + .2.gz ...), bind-mounted
+        // read-only into this container. Strict input validation, NO
+        // shell_exec, NO docker socket access.
+        $id = (int) $routes['2'];
+        $c  = ORM::for_table('tbl_customers')->find_one($id);
+        if (!$c) { r2(U . 'customers/list', 'e', $_L['Account_Not_Found']); }
+
+        $hours = isset($_GET['hours']) ? max(1, min(168, (int) $_GET['hours'])) : 24;
+
+        // Optional manual IP override (when customer is offline and operator
+        // knows their last-known address).
+        $manualIp = '';
+        if (!empty($_GET['ip'])) {
+            $rawIp = trim((string) $_GET['ip']);
+            if (filter_var($rawIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                $manualIp = $rawIp;
+            }
+        }
+
+        // Optional substring filter applied to qname.
+        $filter = isset($_GET['filter']) ? trim((string) $_GET['filter']) : '';
+        if (strlen($filter) > 100) $filter = substr($filter, 0, 100);
+
+        // Resolve current customer IP from Mikrotik /ppp/active unless
+        // the operator passed an explicit IP.
+        $clientIp   = $manualIp;
+        $ipSource   = $manualIp !== '' ? 'manual' : 'mikrotik';
+        $resolveErr = null;
+        if ($clientIp === '') {
+            try {
+                $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+                if (!$rt) { throw new Exception('No router configured'); }
+                $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
+                if (!$client) { throw new Exception('Router unreachable (' . $rt['ip_address'] . ')'); }
+                $req = new RouterOS\Request('/ppp/active/print');
+                $req->setArgument('.proplist', 'name,address');
+                $req->setQuery(RouterOS\Query::where('name', $c['username']));
+                foreach ($client->sendSync($req) as $rr) {
+                    if ($rr->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    $clientIp = (string) $rr->getProperty('address');
+                    break;
+                }
+                if ($clientIp === '') {
+                    $resolveErr = 'Customer is currently offline (no /ppp/active session). '
+                                . 'Pass a last-known IP using the IP override below.';
+                }
+            } catch (Throwable $e) {
+                $resolveErr = $e->getMessage();
+            }
+        }
+
+        $logDir       = '/var/log/dnsmasq';
+        $logBase      = $logDir . '/queries.log';
+        $rows         = [];
+        $domains      = [];
+        $totalScanned = 0;
+        $readErr      = null;
+        $sinceEpoch   = time() - ($hours * 3600);
+        $maxRows      = 5000;
+        $currentYear  = (int) date('Y');
+
+        if ($clientIp === '') {
+            // Already surfaced via $resolveErr; render the template with empty rows.
+        } elseif (!is_dir($logDir)) {
+            $readErr = 'DNS log directory not mounted at ' . $logDir . '. Confirm '
+                     . 'dnsmasq-resolver is running on the VPS and that '
+                     . './dnsmasq-resolver/logs is bind-mounted into phpnuxbill-app.';
+        } else {
+            // Collect candidate files: current + numbered rotations + .gz
+            $files = [];
+            if (is_file($logBase)) $files[] = $logBase;
+            for ($i = 1; $i <= 7; $i++) {
+                if (is_file($logBase . '.' . $i))         $files[] = $logBase . '.' . $i;
+                if (is_file($logBase . '.' . $i . '.gz')) $files[] = $logBase . '.' . $i . '.gz';
+            }
+
+            // dnsmasq line shape:
+            //   May 18 14:30:01 dnsmasq[42]: 1234 172.16.16.243/55432 query[A] youtube.com from 10.99.0.1
+            $needleIp = $clientIp . '/';
+
+            foreach ($files as $f) {
+                // mtime fast-skip — if entire file is older than the window
+                // (plus a day's grace), don't open it.
+                $mtime = @filemtime($f);
+                if ($mtime !== false && $mtime < ($sinceEpoch - 86400)) continue;
+
+                $isGz = substr($f, -3) === '.gz';
+                $fh   = $isGz ? @gzopen($f, 'r') : @fopen($f, 'r');
+                if (!$fh) continue;
+
+                while (true) {
+                    $line = $isGz ? gzgets($fh) : fgets($fh);
+                    if ($line === false) break;
+                    $totalScanned++;
+
+                    // Fast substring filters before regex
+                    if (strpos($line, $needleIp) === false) continue;
+                    if (strpos($line, 'query[')   === false) continue;
+
+                    // Timestamp parse — syslog format has no year, assume current
+                    if (!preg_match('/^([A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})/', $line, $tm)) continue;
+                    $ts = strtotime($tm[1] . ' ' . $currentYear);
+                    if ($ts === false) continue;
+                    // Year-rollover guard: future-dated → previous year
+                    if ($ts > time() + 86400) $ts = strtotime($tm[1] . ' ' . ($currentYear - 1));
+                    if ($ts < $sinceEpoch) continue;
+
+                    // Extract qtype + qname
+                    if (!preg_match('/query\[([A-Z]+)\]\s+(\S+)/', $line, $qm)) continue;
+                    $qtype = $qm[1];
+                    $qname = strtolower($qm[2]);
+
+                    if ($filter !== '' && stripos($qname, $filter) === false) continue;
+
+                    $rows[] = ['ts' => $ts, 'qtype' => $qtype, 'qname' => $qname];
+
+                    if (!isset($domains[$qname])) $domains[$qname] = 0;
+                    $domains[$qname]++;
+
+                    if (count($rows) >= $maxRows) break 2;
+                }
+                $isGz ? gzclose($fh) : fclose($fh);
+            }
+        }
+
+        // Newest first; top-20 unique domains for the summary chips
+        usort($rows, function($a, $b) { return $b['ts'] - $a['ts']; });
+        arsort($domains);
+        $topDomains = array_slice($domains, 0, 20, true);
+
+        $ui->assign('c',            $c);
+        $ui->assign('hours',        $hours);
+        $ui->assign('clientIp',     $clientIp);
+        $ui->assign('manualIp',     $manualIp);
+        $ui->assign('ipSource',     $ipSource);
+        $ui->assign('resolveErr',   $resolveErr);
+        $ui->assign('readErr',      $readErr);
+        $ui->assign('filter',       $filter);
+        $ui->assign('rows',         $rows);
+        $ui->assign('topDomains',   $topDomains);
+        $ui->assign('totalScanned', $totalScanned);
+        $ui->assign('maxRows',      $maxRows);
+        $ui->display('customers-browsing.tpl');
+        break;
+
     default:
     r2(U . 'customers/list', 'e', 'action not defined');
 }

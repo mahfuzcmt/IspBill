@@ -5,7 +5,10 @@
         <div class="panel panel-hovered mb20 panel-primary">
             <div class="panel-heading">
                 Bandwidth Graph &mdash; {$c['username']}
-                <span class="pull-right">
+                <a href="{$_url}customers/edit/{$c['id']}"     class="btn btn-warning btn-sm pull-right" style="margin-left:6px">Edit</a>
+                <a href="{$_url}customers/browsing/{$c['id']}" class="btn btn-default btn-sm pull-right" style="margin-left:6px">Browsing</a>
+                <a href="{$_url}customers/diagnose/{$c['id']}" class="btn btn-info    btn-sm pull-right" style="margin-left:6px">Diagnose</a>
+                <span class="pull-right" style="margin-right:10px">
                     <small id="g-status" class="text-muted">loading…</small>
                 </span>
             </div>
