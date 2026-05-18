@@ -137,6 +137,13 @@ UPDATE tbl_routers SET ip_address='10.99.0.2', username='admin', password='<MT_A
 > it adds DNS sinkholing + 443 reject rules alongside the rules below
 > (the port-80 redirect is untouched). Roll back with the commands at
 > the bottom of that doc.
+>
+> **Customer DNS logging (BTRC):** a follow-on patch logs every PPPoE
+> customer's DNS queries to a 7-day-rotated docker log via a second
+> dnsmasq instance on `10.99.0.1:5454`. See
+> [`dns-logging-patch.md`](./dns-logging-patch.md) for deploy/rollback
+> and the `lookup-dns.sh` query CLI. Does NOT capture full URLs or
+> HTTPS payloads — DNS-level visibility only.
 
 ```
 # Forward HTTP from expired-users address-list to the notice proxy on the VPS
