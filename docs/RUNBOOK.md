@@ -176,6 +176,63 @@ The HTML files under `tnr-hotspot-login-v14-en-bn/` on the Mikrotik were rebrand
 ### Bandwidth / queue stats
 The cron `traffic-poller.php` polls `/queue/simple/print stats=yes` every minute and writes one row per active PPPoE session to `tbl_traffic_samples`. 7-day retention.
 
+### DNS query logging (BTRC) — deployed 2026-05-18
+
+Live setup spanning Mikrotik, VPS WireGuard, VPS UFW, and a new Docker
+container. Full architecture + deploy/rollback procedure lives in
+[`dns-logging-patch.md`](./dns-logging-patch.md); below is the
+why-it-works summary so future operators don't undo a piece by accident.
+
+**Flow:**
+```
+customer (172.16.16.x) → Mikrotik dstnat → 10.99.0.1:5454 (dnsmasq-resolver)
+                       → logged to /opt/phpnuxbill/dnsmasq-resolver/logs/queries.log
+                       → IspBill admin tab reads same file (ro mount)
+```
+
+**Mikrotik state added** (all comment-tagged `NetPulse-*`):
+```
+# DNAT customer DNS to the VPS resolver on port 5454
+NetPulse-dns-log-udp     dstnat udp 53 src=172.16.16.0/24 → 10.99.0.1:5454
+NetPulse-dns-log-tcp     dstnat tcp 53 src=172.16.16.0/24 → 10.99.0.1:5454
+
+# Bypass masquerade for ALL traffic destined to the VPS. CRITICAL — without
+# this, all customer source IPs get rewritten to 10.99.0.2 and per-customer
+# attribution is impossible. Also fixes notice.php's IP→username lookup.
+# Must remain at TOP of NAT chain (position 0).
+NetPulse-no-masq-to-VPS  srcnat accept dst-address=10.99.0.1  (position 0)
+```
+
+**VPS WireGuard** (`/etc/wireguard/wg0.conf`):
+```
+[Peer]
+PublicKey = iN6p0seukEX2+voa6lmv8T7WStj5i7ltTUdHk44r8To=
+AllowedIPs = 10.99.0.2/32, 192.168.100.0/24, 172.16.16.0/24  ← LAST ENTRY ADDED
+```
+Without `172.16.16.0/24` in AllowedIPs, replies from the VPS to customer
+IPs route via the public internet (wrong path, packets dropped). With
+it, wg-quick auto-adds the kernel route on tunnel up.
+
+**VPS UFW:**
+```
+ufw allow in on wg0 from 172.16.16.0/24 comment 'NetPulse customer subnet via WG'
+```
+Required because UFW's default INPUT policy is DROP and there was no
+existing rule covering customer-subnet traffic on `wg0` (the previous
+masquerade meant all packets arrived as `10.99.0.2` which was already
+trusted by other paths).
+
+**Why this also fixed the notice page:** before the masquerade-bypass,
+`notice.php` (`system/controllers/notice.php:31-50`) was looking up
+`/ppp/active` for `address=10.99.0.2` on every expired-customer
+redirect, never matching, and rendering `username="Unknown"`. With the
+bypass in place it now sees the real customer IP and renders a
+personalised Bengali notice with name + plan + expiry.
+
+**To remove the DNS logging entirely:** see the rollback section in
+`dns-logging-patch.md`. **Do NOT remove `NetPulse-no-masq-to-VPS`** —
+the notice page now depends on it.
+
 ## 5. Database state changes (live `phpnuxbill` DB)
 
 ### Schema
