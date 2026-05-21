@@ -78,7 +78,7 @@
 
                 <p class="text-muted small mt20">
                     Historical samples are written by a 1-minute cron from <code>/queue/simple/print</code>;
-                    the latest point is live (refreshed every 3&nbsp;s). Retention: 7 days.
+                    the latest point is live (refreshed every 1&nbsp;s). Retention: 7 days.
                 </p>
             </div>
         </div>
@@ -202,10 +202,13 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
             document.getElementById('g-rate-out').textContent = '0 bps';
             return;
         }
-        document.getElementById('g-rate-in').textContent  = fmtRate(live.rateIn);
-        document.getElementById('g-rate-out').textContent = fmtRate(live.rateOut);
-        document.getElementById('g-bytes-in').textContent  = fmtBytes(live.bytesIn);
-        document.getElementById('g-bytes-out').textContent = fmtBytes(live.bytesOut);
+        // Data model: rateIn/bytesIn = queue RX = customer upload (↑);
+        // rateOut/bytesOut = queue TX = customer download (↓). Feed the visible
+        // ↓/↑ boxes accordingly so they match the chart and the live-traffic page.
+        document.getElementById('g-rate-in').textContent   = fmtRate(live.rateOut);  // Current ↓ = download
+        document.getElementById('g-rate-out').textContent  = fmtRate(live.rateIn);   // Current ↑ = upload
+        document.getElementById('g-bytes-in').textContent  = fmtBytes(live.bytesOut); // Session ↓ = download
+        document.getElementById('g-bytes-out').textContent = fmtBytes(live.bytesIn);  // Session ↑ = upload
         document.getElementById('g-ip').textContent     = live.address || '—';
         document.getElementById('g-uptime').textContent = live.uptime  || '—';
         document.getElementById('g-mac').textContent    = live.callerId|| '—';
@@ -220,7 +223,6 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
         var e = document.getElementById('g-empty');
         if (e) e.style.display = show ? 'flex' : 'none';
     }
-    var inFlight = false;
     function fetchAndRender() {
         if (typeof Chart === 'undefined') {
             setStatus('⚠ Chart.js failed to load (CDN blocked?)', 'text-danger');

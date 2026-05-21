@@ -33,7 +33,8 @@
                     </table>
                 </div>
                 <p class="text-muted small">
-                    Refreshes every 3&nbsp;s. ↓/↑ Now = computed from byte-counter deltas between refreshes.
+                    Refreshes every 1&nbsp;s. ↓/↑ Now = router-reported queue rate (bits/sec), falling
+                    back to byte-counter deltas between refreshes when no live rate is available.
                     Session totals are cumulative since the user connected.
                 </p>
             </div>
@@ -87,14 +88,15 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
             // queue RX = customer upload, queue TX = customer download
             var rd = (typeof s.rateOut === 'number') ? s.rateOut : 0;  // Download = queue TX
             var ru = (typeof s.rateIn  === 'number') ? s.rateIn  : 0;  // Upload = queue RX
-            // Fallback delta if router didn't give a rate.
+            // Fallback delta if router didn't give a rate (e.g. hotspot sessions).
+            // Byte deltas are bytes/sec; multiply by 8 to match fmtRate's bits/sec.
             if (!rd && !ru) {
                 var p = prev[s.username];
                 if (p && p.ts) {
                     var dt = (now - p.ts) / 1000;
                     if (dt > 0) {
-                        rd = Math.max(0, (s.bytesOut - p.bytesOut) / dt);  // Download = bytesOut delta
-                        ru = Math.max(0, (s.bytesIn - p.bytesIn) / dt);   // Upload = bytesIn delta
+                        rd = Math.max(0, (s.bytesOut - p.bytesOut) * 8 / dt);  // Download = bytesOut delta
+                        ru = Math.max(0, (s.bytesIn - p.bytesIn) * 8 / dt);   // Upload = bytesIn delta
                     }
                 }
             }
