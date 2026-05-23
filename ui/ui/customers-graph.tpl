@@ -137,14 +137,39 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
         return (bps/1e9).toFixed(2) + ' Gbps';
     }
 
+    // Track current chart unit for tooltip formatting
+    var chartUnit = 'Mbps';
+    var chartDivisor = 1e6;
+
     function buildChart(samples) {
         var canvas = document.getElementById('g-chart');
-        // bits/sec → Mbps
-        var dataIn  = samples.map(function (s) { return { x: s.ts, y: s.rateIn  / 1e6 }; });
-        var dataOut = samples.map(function (s) { return { x: s.ts, y: s.rateOut / 1e6 }; });
+
+        // Find max rate to determine best unit
+        var maxRate = 0;
+        samples.forEach(function (s) {
+            if (s.rateIn > maxRate) maxRate = s.rateIn;
+            if (s.rateOut > maxRate) maxRate = s.rateOut;
+        });
+
+        // Choose unit: Kbps if max < 1 Mbps, otherwise Mbps
+        if (maxRate < 1e6) {
+            chartUnit = 'Kbps';
+            chartDivisor = 1000;
+        } else {
+            chartUnit = 'Mbps';
+            chartDivisor = 1e6;
+        }
+
+        var dataIn  = samples.map(function (s) { return { x: s.ts, y: s.rateIn  / chartDivisor }; });
+        var dataOut = samples.map(function (s) { return { x: s.ts, y: s.rateOut / chartDivisor }; });
+
         if (chart) {
-            chart.data.datasets[0].data = dataIn;
-            chart.data.datasets[1].data = dataOut;
+            // Update unit in labels if changed
+            chart.data.datasets[0].label = 'Download (' + chartUnit + ')';
+            chart.data.datasets[1].label = 'Upload (' + chartUnit + ')';
+            chart.options.scales.y.title.text = chartUnit;
+            chart.data.datasets[0].data = dataOut;
+            chart.data.datasets[1].data = dataIn;
             chart.update('none');
             return;
         }
@@ -157,14 +182,14 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
             data: {
                 datasets: [
                     {
-                        label: 'Download (Mbps)',
+                        label: 'Download (' + chartUnit + ')',
                         data: dataOut,
                         borderColor: '#16A34A',
                         backgroundColor: 'rgba(22,163,74,0.15)',
                         borderWidth: 2, tension: 0.25, fill: true, pointRadius: 0,
                     },
                     {
-                        label: 'Upload (Mbps)',
+                        label: 'Upload (' + chartUnit + ')',
                         data: dataIn,
                         borderColor: '#0F2742',
                         backgroundColor: 'rgba(15,39,66,0.10)',
@@ -178,12 +203,12 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
                 interaction: { mode: 'nearest', axis: 'x', intersect: false },
                 scales: {
                     x: { type: 'time', time: { tooltipFormat: 'MMM d HH:mm:ss' }, ticks: { maxRotation: 0 } },
-                    y: { beginAtZero: true, title: { display: true, text: 'Mbps' } },
+                    y: { beginAtZero: true, title: { display: true, text: chartUnit } },
                 },
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: { callbacks: {
-                        label: function (ctx) { return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + ' Mbps'; },
+                        label: function (ctx) { return ctx.dataset.label.split(' (')[0] + ': ' + ctx.parsed.y.toFixed(2) + ' ' + chartUnit; },
                     } },
                 },
             },
