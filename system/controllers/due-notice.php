@@ -1,7 +1,7 @@
 <?php
 /**
  * Due Notice Controller
- * Shows payment reminder to users with outstanding balance
+ * Shows friendly payment reminder to users with credit sales (unpaid dues)
  * Auto-redirects to original URL after 30 seconds
  * Shows max 4 times per day per user
  */
@@ -20,68 +20,54 @@ $userIP = trim($userIP);
 $originalUrl = isset($_GET['url']) ? $_GET['url'] : 'https://www.google.com';
 $originalUrl = filter_var($originalUrl, FILTER_SANITIZE_URL);
 
-// Find customer by IP from active PPPoE sessions or recharges
+// Find customer by checking Mikrotik for active PPPoE user with this IP
 $customer = null;
+$creditSale = null;
 $dueAmount = 0;
 
-// Try to find customer by checking their current session
-$activeSession = ORM::for_table('tbl_user_recharges')
-    ->select('tbl_user_recharges.*')
-    ->select('tbl_customers.id', 'customer_id')
-    ->select('tbl_customers.username')
-    ->select('tbl_customers.fullname')
-    ->select('tbl_customers.balance')
-    ->join('tbl_customers', array('tbl_user_recharges.customer_id', '=', 'tbl_customers.id'))
-    ->where_raw("INET_ATON(?) BETWEEN INET_ATON(SUBSTRING_INDEX(tbl_user_recharges.pool_expired, '/', 1)) AND INET_ATON(SUBSTRING_INDEX(tbl_user_recharges.pool_expired, '/', 1))", array($userIP))
+$router = ORM::for_table('tbl_routers')
+    ->where('enabled', 'yes')
     ->find_one();
 
-if (!$activeSession) {
-    // Try matching by username pattern or other means
-    // For now, check if there's a customer with negative balance
-    $customers = ORM::for_table('tbl_customers')
-        ->where_lt('balance', 0)
-        ->find_many();
+if ($router) {
+    try {
+        $client = Mikrotik::getClient($router['ip_address'], $router['username'], $router['password']);
+        if ($client) {
+            $request = new \RouterOS\Request('/ppp/active/print');
+            $request->setArgument('.proplist', 'name,address,caller-id');
+            $activeUsers = $client->sendSync($request)->toArray();
 
-    // Check router for active PPPoE user with this IP
-    $router = ORM::for_table('tbl_routers')
-        ->where('enabled', 'yes')
-        ->find_one();
+            foreach ($activeUsers as $user) {
+                if (isset($user['address']) && $user['address'] === $userIP) {
+                    // Found the user by IP
+                    $customer = ORM::for_table('tbl_customers')
+                        ->where('username', $user['name'])
+                        ->find_one();
 
-    if ($router) {
-        try {
-            $client = Mikrotik::getClient($router['ip_address'], $router['username'], $router['password']);
-            if ($client) {
-                $request = new \RouterOS\Request('/ppp/active/print');
-                $request->setArgument('.proplist', 'name,address,caller-id');
-                $activeUsers = $client->sendSync($request)->toArray();
-
-                foreach ($activeUsers as $user) {
-                    if (isset($user['address']) && $user['address'] === $userIP) {
-                        // Found the user
-                        $customer = ORM::for_table('tbl_customers')
-                            ->where('username', $user['name'])
+                    if ($customer) {
+                        // Check if they have unpaid credit sales
+                        $creditSale = ORM::for_table('tbl_credit_sales')
+                            ->where('customer_id', $customer['id'])
+                            ->where('status', 'due')
+                            ->order_by_desc('created_at')
                             ->find_one();
-                        break;
                     }
+                    break;
                 }
             }
-        } catch (Exception $e) {
-            // Silently fail
         }
+    } catch (Exception $e) {
+        // Silently fail
     }
-} else {
-    $customer = ORM::for_table('tbl_customers')
-        ->where('id', $activeSession['customer_id'])
-        ->find_one();
 }
 
 // If no customer found or no dues, redirect immediately
-if (!$customer || $customer['balance'] >= 0) {
+if (!$customer || !$creditSale) {
     header('Location: ' . $originalUrl);
     exit;
 }
 
-$dueAmount = abs($customer['balance']);
+$dueAmount = $creditSale['amount'];
 $customerName = $customer['fullname'] ?: $customer['username'];
 
 // Track view count - store in a simple file-based system
@@ -113,23 +99,23 @@ file_put_contents($viewCountFile, json_encode($viewCounts));
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta http-equiv="refresh" content="30;url=<?php echo htmlspecialchars($originalUrl); ?>">
-<title>বকেয়া বিল পরিশোধ করুন - AHAD Network</title>
+<title>বিল পরিশোধের অনুরোধ - AHAD Network</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linear-gradient(135deg,#ff6b6b 0%,#ee5a24 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:15px}
+body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:15px}
 .box{background:#fff;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.3);width:100%;max-width:420px;overflow:hidden}
-.head{background:linear-gradient(135deg,#c0392b 0%,#e74c3c 100%);padding:25px;text-align:center;color:#fff}
-.head h1{font-size:24px;margin-bottom:8px}
+.head{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:25px;text-align:center;color:#fff}
+.head h1{font-size:22px;margin-bottom:8px}
 .head p{font-size:14px;opacity:0.9}
 .content{padding:25px}
-.warning-icon{text-align:center;margin-bottom:20px}
-.warning-icon span{display:inline-block;width:70px;height:70px;background:linear-gradient(135deg,#f39c12 0%,#e67e22 100%);border-radius:50%;line-height:70px;font-size:36px;color:#fff}
-.due-box{background:linear-gradient(135deg,#c0392b 0%,#e74c3c 100%);border-radius:12px;padding:20px;text-align:center;color:#fff;margin-bottom:20px}
+.hello-icon{text-align:center;margin-bottom:20px}
+.hello-icon span{display:inline-block;width:70px;height:70px;background:linear-gradient(135deg,#f39c12 0%,#e67e22 100%);border-radius:50%;line-height:70px;font-size:32px;color:#fff}
+.due-box{background:linear-gradient(135deg,#e74c3c 0%,#c0392b 100%);border-radius:12px;padding:20px;text-align:center;color:#fff;margin-bottom:20px}
 .due-label{font-size:14px;opacity:0.9;margin-bottom:5px}
 .due-amount{font-size:36px;font-weight:bold}
 .due-amount span{font-size:18px}
 .customer-name{font-size:13px;opacity:0.8;margin-top:8px}
-.msg{text-align:center;color:#2d3436;font-size:15px;margin-bottom:20px;line-height:1.6}
+.msg{text-align:center;color:#2d3436;font-size:15px;margin-bottom:20px;line-height:1.7}
 .payment-box{background:#f8f9fa;border-radius:12px;padding:20px;margin-bottom:20px}
 .payment-box h3{color:#2d3436;font-size:16px;margin-bottom:15px;text-align:center}
 .payment-method{display:flex;align-items:center;padding:12px;background:#fff;border-radius:8px;margin-bottom:10px;border:2px solid #e0e0e0}
@@ -143,10 +129,10 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 .payment-method .name{font-weight:600;color:#2d3436;font-size:14px}
 .payment-method .number{color:#667eea;font-size:16px;font-weight:bold;letter-spacing:1px}
 .payment-method .note{font-size:11px;color:#666;margin-top:2px}
-.timer-box{background:#fff3cd;border:2px solid #f39c12;border-radius:10px;padding:15px;text-align:center;margin-bottom:15px}
-.timer-box p{color:#856404;font-size:13px;margin-bottom:5px}
-.timer{font-size:28px;font-weight:bold;color:#e67e22}
-.skip-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:10px;text-align:center;font-weight:600;font-size:15px}
+.timer-box{background:#e8f5e9;border:2px solid #4caf50;border-radius:10px;padding:15px;text-align:center;margin-bottom:15px}
+.timer-box p{color:#2e7d32;font-size:13px;margin-bottom:5px}
+.timer{font-size:28px;font-weight:bold;color:#388e3c}
+.skip-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#00b894 0%,#00cec9 100%);color:#fff;text-decoration:none;border-radius:10px;text-align:center;font-weight:600;font-size:15px}
 .skip-btn:hover{opacity:0.9}
 .foot{padding:12px;background:#f8f9fa;text-align:center;font-size:11px;color:#636e72}
 .view-count{font-size:11px;color:#999;text-align:center;margin-top:10px}
@@ -155,19 +141,19 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 <body>
 <div class="box">
 <div class="head">
-<h1>বকেয়া বিল আছে!</h1>
-<p>আপনার ইন্টারনেট বিল বকেয়া আছে</p>
+<h1>বিল পরিশোধের অনুরোধ</h1>
+<p>প্রিয় গ্রাহক, আপনার জন্য একটি বার্তা</p>
 </div>
 <div class="content">
-<div class="warning-icon"><span>!</span></div>
+<div class="hello-icon"><span>৳</span></div>
 
 <div class="due-box">
-<div class="due-label">বকেয়া পরিমাণ</div>
+<div class="due-label">বকেয়া বিল</div>
 <div class="due-amount"><span>৳</span> <?php echo number_format($dueAmount, 0); ?></div>
 <div class="customer-name"><?php echo htmlspecialchars($customerName); ?></div>
 </div>
 
-<p class="msg">অনুগ্রহ করে আপনার বকেয়া বিল দ্রুত পরিশোধ করুন। অন্যথায় সেবা বিচ্ছিন্ন হতে পারে।</p>
+<p class="msg">আপনার ইন্টারনেট সেবা চালু আছে। বিল পরিশোধ করতে ভুলে গেছেন? সুবিধামতো সময়ে পরিশোধ করে দিন। ধন্যবাদ!</p>
 
 <div class="payment-box">
 <h3>পেমেন্ট করুন</h3>

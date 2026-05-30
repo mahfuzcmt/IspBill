@@ -1,7 +1,7 @@
 <?php
 /**
  * Due Users Sync Script
- * Run via cron to sync users with negative balance to Mikrotik address list
+ * Run via cron to sync users with unpaid credit sales to Mikrotik address list
  * Usage: php due-sync.php
  */
 
@@ -25,17 +25,17 @@ try {
         exit(1);
     }
 
-    // Get all customers with negative balance (have dues)
-    $dueCustomers = ORM::for_table('tbl_customers')
-        ->where_lt('balance', 0)
+    // Get all customers with unpaid credit sales (status = 'due')
+    $dueCredits = ORM::for_table('tbl_credit_sales')
+        ->where('status', 'due')
         ->find_many();
 
     $dueUsernames = [];
-    foreach ($dueCustomers as $c) {
-        $dueUsernames[$c['username']] = abs($c['balance']);
+    foreach ($dueCredits as $c) {
+        $dueUsernames[$c['username']] = $c['amount'];
     }
 
-    echo "Found " . count($dueUsernames) . " customers with dues\n";
+    echo "Found " . count($dueUsernames) . " customers with unpaid dues\n";
 
     // Get active PPPoE sessions
     $request = new \RouterOS\Request('/ppp/active/print');
@@ -52,7 +52,7 @@ try {
         }
     }
 
-    echo "Found " . count($dueIPs) . " active sessions with dues\n";
+    echo "Found " . count($dueIPs) . " active sessions with unpaid dues\n";
 
     // Clear existing due-warning address list
     $request = new \RouterOS\Request('/ip/firewall/address-list/print');
@@ -73,7 +73,7 @@ try {
         $addRequest = new \RouterOS\Request('/ip/firewall/address-list/add');
         $addRequest->setArgument('list', 'due-warning');
         $addRequest->setArgument('address', $ip);
-        $addRequest->setArgument('comment', 'Due: ' . $username);
+        $addRequest->setArgument('comment', 'Due: ' . $username . ' (' . number_format($dueUsernames[$username], 0) . ' BDT)');
         $addRequest->setArgument('timeout', '5m'); // Auto-expire in 5 minutes
         $client->sendSync($addRequest);
         echo "Added $ip ($username) to due-warning list\n";
