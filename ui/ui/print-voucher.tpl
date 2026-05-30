@@ -75,7 +75,7 @@
         position: relative;
         border-radius: 8px;
         padding: 8px 6px 4px;
-        height: 5.2cm;
+        height: 5cm;
         background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
         border: 1px solid #e0e5ff;
         box-shadow: 0 1px 3px rgba(102,126,234,0.1);
@@ -179,7 +179,6 @@
         padding: 5px 8px;
         background: linear-gradient(135deg, #1a1a2e 0%, #2d3436 100%);
         border-radius: 6px;
-        margin-bottom: 4px;
     }
     .plan-name {
         font-size: 9px;
@@ -197,7 +196,7 @@
         text-align: center;
         font-size: 6px;
         color: #aaa;
-        margin-top: auto;
+        margin-top: 3px;
     }
 
     /* Print Styles */
