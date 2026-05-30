@@ -74,14 +74,11 @@
     .voucher-card {
         position: relative;
         border-radius: 8px;
-        padding: 8px 6px 4px;
-        height: 5cm;
+        padding: 8px 6px 5px;
         background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
         border: 1px solid #e0e5ff;
         box-shadow: 0 1px 3px rgba(102,126,234,0.1);
         overflow: hidden;
-        display: flex;
-        flex-direction: column;
     }
     .voucher-card::before {
         content: '';
@@ -196,7 +193,7 @@
         text-align: center;
         font-size: 6px;
         color: #aaa;
-        margin-top: 3px;
+        margin-top: 2px;
     }
 
     /* Print Styles */
