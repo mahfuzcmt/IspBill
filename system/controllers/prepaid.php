@@ -72,6 +72,8 @@ switch ($action) {
         $type = _post('type');
         $server = _post('server');
         $plan = _post('plan');
+        $credit_sale = _post('credit_sale') == '1';
+        $send_sms = _post('send_sms') == '1';
 
         $date_now = date("Y-m-d H:i:s");
         $date_only = date("Y-m-d");
@@ -258,6 +260,21 @@ switch ($action) {
             $in = ORM::for_table('tbl_transactions')->where('username', $c['username'])->order_by_desc('id')->find_one();
             $ui->assign('in', $in);
 
+            // Track as credit sale if checkbox was checked
+            if ($credit_sale) {
+                $cs = ORM::for_table('tbl_credit_sales')->create();
+                $cs->customer_id = $id_customer;
+                $cs->username = $c['username'];
+                $cs->plan_name = $p['name_plan'];
+                $cs->bill_month = date('Y-m');
+                $cs->amount = $p['price'];
+                $cs->status = 'due';
+                $cs->created_at = $date_now;
+                $cs->notes = 'Recharge by ' . ($admin['fullname'] ?? 'admin');
+                $cs->save();
+                _log('Credit sale created for recharge: ' . $p['name_plan'] . ' (' . $p['price'] . ' BDT)', 'User', $id_customer);
+            }
+
             $msg = "*$config[CompanyName]*\n".
 					"$config[address]\n".
 					"$config[phone]\n".
@@ -276,10 +293,13 @@ switch ($action) {
 					"\n\n".
 					"$config[note]";
 
-            if ($_c['user_notification_payment'] == 'sms') {
-                Message::sendSMS($c['phonenumber'], $msg);
-            } else if ($_c['user_notification_payment'] == 'wa') {
-                Message::sendWhatsapp($c['phonenumber'], $msg);
+            // Only send SMS/WhatsApp if checkbox was checked
+            if ($send_sms) {
+                if ($_c['user_notification_payment'] == 'sms') {
+                    Message::sendSMS($c['phonenumber'], $msg);
+                } else if ($_c['user_notification_payment'] == 'wa') {
+                    Message::sendWhatsapp($c['phonenumber'], $msg);
+                }
             }
 
             $ui->assign('date', $date_now);

@@ -43,6 +43,18 @@
 							</div>
 
 							<div class="form-group">
+								<label class="col-md-2 control-label">Options</label>
+								<div class="col-md-6">
+									<label class="checkbox-inline">
+										<input type="checkbox" name="credit_sale" value="1"> Credit Sale (Due)
+									</label>
+									<label class="checkbox-inline">
+										<input type="checkbox" name="send_sms" value="1" checked> Send SMS
+									</label>
+								</div>
+							</div>
+
+							<div class="form-group">
 								<div class="col-lg-offset-2 col-lg-10">
 									<button class="btn btn-success waves-effect waves-light" type="submit">{$_L['Recharge']}</button>
 									Or <a href="{$_url}customers/list">{$_L['Cancel']}</a>
