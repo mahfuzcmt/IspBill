@@ -70,15 +70,18 @@
         gap: 3px;
     }
 
-    /* Modern Voucher Card */
+    /* Modern Voucher Card - 4 cols × 6 rows = 24 per A4 */
     .voucher-card {
         position: relative;
         border-radius: 8px;
         padding: 8px 6px 5px;
+        height: 4.8cm;
         background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
         border: 1px solid #e0e5ff;
         box-shadow: 0 1px 3px rgba(102,126,234,0.1);
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
     }
     .voucher-card::before {
         content: '';
@@ -193,7 +196,8 @@
         text-align: center;
         font-size: 6px;
         color: #aaa;
-        margin-top: 2px;
+        margin-top: auto;
+        padding-top: 3px;
     }
 
     /* Print Styles */

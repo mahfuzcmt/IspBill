@@ -450,7 +450,7 @@ switch ($action) {
         $pagebreak = intval(_post('pagebreak'));
         $limit = intval(_post('limit'));
 
-        if ($pagebreak < 1) $pagebreak = 20;
+        if ($pagebreak < 1) $pagebreak = 24;
 
         if ($limit < 1) $limit = $pagebreak * 2;
 
