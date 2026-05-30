@@ -63,22 +63,20 @@
         opacity: 0.9;
     }
 
-    /* Voucher Grid - 4 columns, 5 rows = 20 per page */
+    /* Voucher Grid - 4 cols × 7 rows = 28 per A4 */
     .voucher-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 3px;
+        gap: 1px;
     }
 
-    /* Modern Voucher Card - 4 cols × 6 rows = 24 per A4 */
+    /* Compact Voucher Card */
     .voucher-card {
         position: relative;
-        border-radius: 8px;
-        padding: 6px;
-        height: 4.8cm;
+        border-radius: 6px;
+        padding: 4px;
         background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
         border: 1px solid #e0e5ff;
-        box-shadow: 0 1px 3px rgba(102,126,234,0.1);
         overflow: hidden;
     }
     .voucher-card::before {
@@ -111,7 +109,7 @@
     /* Brand */
     .brand {
         text-align: center;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
     }
     .brand-name {
         font-size: 11px;
@@ -134,17 +132,16 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        margin-bottom: 6px;
+        gap: 6px;
+        margin-bottom: 3px;
     }
     .qr-box {
-        width: 52px;
-        height: 52px;
-        padding: 3px;
+        width: 44px;
+        height: 44px;
+        padding: 2px;
         background: white;
-        border-radius: 6px;
-        border: 2px solid #667eea;
-        box-shadow: 0 2px 8px rgba(102,126,234,0.2);
+        border-radius: 4px;
+        border: 1.5px solid #667eea;
     }
     .qr-box img {
         width: 100%;
@@ -174,9 +171,9 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 5px 8px;
+        padding: 3px 6px;
         background: linear-gradient(135deg, #1a1a2e 0%, #2d3436 100%);
-        border-radius: 6px;
+        border-radius: 4px;
     }
     .plan-name {
         font-size: 9px;
