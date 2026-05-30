@@ -49,7 +49,7 @@
 										<input type="checkbox" name="credit_sale" value="1"> Credit Sale (Due)
 									</label>
 									<label class="checkbox-inline">
-										<input type="checkbox" name="send_sms" value="1" checked> Send SMS
+										<input type="checkbox" name="send_sms" value="1"> Send SMS
 									</label>
 								</div>
 							</div>

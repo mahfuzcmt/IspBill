@@ -132,7 +132,7 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
     function fmtRate(bps) {
         if (!bps || bps < 0) return '0 bps';
         if (bps < 1000) return Math.round(bps) + ' bps';
-        if (bps < 1e6) return (bps/1000).toFixed(1) + ' Kbps';
+        if (bps < 1e6) return (bps/1000).toFixed(1) + ' kbps';
         if (bps < 1e9) return (bps/1e6).toFixed(2) + ' Mbps';
         return (bps/1e9).toFixed(2) + ' Gbps';
     }
@@ -151,9 +151,9 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
             if (s.rateOut > maxRate) maxRate = s.rateOut;
         });
 
-        // Choose unit: Kbps if max < 1 Mbps, otherwise Mbps
+        // Choose unit: kbps if max < 1 Mbps, otherwise Mbps
         if (maxRate < 1e6) {
-            chartUnit = 'Kbps';
+            chartUnit = 'kbps';
             chartDivisor = 1000;
         } else {
             chartUnit = 'Mbps';

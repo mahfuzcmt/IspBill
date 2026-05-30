@@ -61,7 +61,7 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
     function fmtRate(bps) {
         if (!bps || bps < 0) return '—';
         if (bps < 1000) return Math.round(bps) + ' bps';
-        if (bps < 1e6)  return (bps/1000).toFixed(1) + ' Kbps';
+        if (bps < 1e6)  return (bps/1000).toFixed(1) + ' kbps';
         if (bps < 1e9)  return (bps/1e6).toFixed(2) + ' Mbps';
         return (bps/1e9).toFixed(2) + ' Gbps';
     }

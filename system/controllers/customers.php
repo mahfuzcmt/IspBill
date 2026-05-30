@@ -860,30 +860,43 @@ switch ($action) {
                 ];
             }
 
-            // Live snapshot from Mikrotik. Each call is wrapped because PEAR2 throws
-            // "Unrecognized response type" when a query returns no data (e.g. user offline).
+            // Live snapshot from Mikrotik using interface/monitor-traffic for accurate rates.
             $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
             if ($rt) {
                 $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
                 if ($client) try {
+                    // Get cumulative bytes from queue
                     try {
                         $req = new RouterOS\Request('/queue/simple/print');
                         $req->setArgument('stats', 'yes');
-                        $req->setArgument('.proplist', 'name,bytes,rate');
+                        $req->setArgument('.proplist', 'name,bytes');
                         $req->setQuery(RouterOS\Query::where('name', '<pppoe-' . $username . '>'));
                         foreach ($client->sendSync($req) as $r) {
                             if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
                             $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-                            $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
                             $out['live'] = [
                                 'ts'       => time() * 1000,
-                                'rateIn'   => (int) ($rate[0]  ?? 0),
-                                'rateOut'  => (int) ($rate[1]  ?? 0),
+                                'rateIn'   => 0,
+                                'rateOut'  => 0,
                                 'bytesIn'  => (int) ($bytes[0] ?? 0),
                                 'bytesOut' => (int) ($bytes[1] ?? 0),
                             ];
                         }
                     } catch (Throwable $e) { /* user has no dynamic queue (offline) */ }
+
+                    // Get real-time rate from interface monitor (matches Winbox)
+                    try {
+                        $req = new RouterOS\Request('/interface/monitor-traffic');
+                        $req->setArgument('interface', '<pppoe-' . $username . '>');
+                        $req->setArgument('once', '');
+                        foreach ($client->sendSync($req) as $r) {
+                            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                            if (!$out['live']) $out['live'] = ['ts' => time() * 1000, 'bytesIn'=>0,'bytesOut'=>0];
+                            // rx = upload from user, tx = download to user
+                            $out['live']['rateIn']  = (int) ($r->getProperty('rx-bits-per-second') ?? 0);
+                            $out['live']['rateOut'] = (int) ($r->getProperty('tx-bits-per-second') ?? 0);
+                        }
+                    } catch (Throwable $e) { /* interface monitor failed */ }
 
                     try {
                         $req = new RouterOS\Request('/ppp/active/print');
@@ -920,9 +933,8 @@ switch ($action) {
 
     case 'live-traffic-data':
         // JSON endpoint: current PPP active sessions with real-time rate.
-        // RouterOS 7 doesn't expose bytes-in/out on /ppp/active; we pull both
-        // cumulative bytes AND current rate from /queue/simple (dynamic PPPoE
-        // queues), keyed on "<pppoe-USERNAME>".
+        // Uses /interface/monitor-traffic for accurate real-time rates (matches Winbox).
+        // Queue rate property gives averaged/delayed values that don't match Winbox.
         header('Content-Type: application/json');
         $out = ['ts' => time(), 'sessions' => [], 'error' => null];
         try {
@@ -936,15 +948,12 @@ switch ($action) {
                 $custMap[$c['username']] = $c['fullname'];
             }
 
-            // Each Mikrotik call is wrapped — PEAR2 throws "Unrecognized response type"
-            // when a query returns no data, which would otherwise fail the whole endpoint.
-
-            // 1. Queue stats map (PPPoE dynamic queues)
+            // 1. Queue stats map for cumulative bytes (PPPoE dynamic queues)
             $queueByUser = [];
             try {
                 $req = new RouterOS\Request('/queue/simple/print');
                 $req->setArgument('stats', 'yes');
-                $req->setArgument('.proplist', 'name,bytes,rate');
+                $req->setArgument('.proplist', 'name,bytes');
                 foreach ($client->sendSync($req) as $r) {
                     if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
                     $qname = $r->getProperty('name');
@@ -954,38 +963,72 @@ switch ($action) {
                         $user = trim($qname, '<>');
                     }
                     $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-                    $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
                     $queueByUser[$user] = [
                         'bytesRx' => (int) ($bytes[0] ?? 0),
                         'bytesTx' => (int) ($bytes[1] ?? 0),
-                        'rateRx'  => (int) ($rate[0]  ?? 0),
-                        'rateTx'  => (int) ($rate[1]  ?? 0),
                     ];
                 }
-            } catch (Throwable $e) { /* no dynamic queues — leave queueByUser empty */ }
+            } catch (Throwable $e) { /* no dynamic queues */ }
 
             // 2. Active PPP sessions (IP/uptime/caller-id)
+            $sessions = [];
             try {
                 $req = new RouterOS\Request('/ppp/active/print');
                 $req->setArgument('.proplist', 'name,service,address,uptime,caller-id');
                 foreach ($client->sendSync($req) as $r) {
                     if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                    $name = $r->getProperty('name');
-                    $q = $queueByUser[$name] ?? ['bytesRx'=>0,'bytesTx'=>0,'rateRx'=>0,'rateTx'=>0];
-                    $out['sessions'][] = [
-                        'username' => $name,
-                        'fullname' => $custMap[$name] ?? '',
+                    $sessions[] = [
+                        'name'     => $r->getProperty('name'),
                         'service'  => $r->getProperty('service'),
                         'address'  => $r->getProperty('address'),
                         'uptime'   => $r->getProperty('uptime'),
                         'callerId' => $r->getProperty('caller-id'),
-                        'bytesIn'  => $q['bytesRx'],
-                        'bytesOut' => $q['bytesTx'],
-                        'rateIn'   => $q['rateRx'],
-                        'rateOut'  => $q['rateTx'],
                     ];
                 }
             } catch (Throwable $e) { /* no active PPP sessions */ }
+
+            // 3. Get real-time interface rates using monitor-traffic (matches Winbox)
+            $ifaceRates = [];
+            if (!empty($sessions)) {
+                // Build comma-separated interface list for bulk monitor
+                $ifaceNames = array_map(function($s) { return '<pppoe-' . $s['name'] . '>'; }, $sessions);
+                try {
+                    $req = new RouterOS\Request('/interface/monitor-traffic');
+                    $req->setArgument('interface', implode(',', $ifaceNames));
+                    $req->setArgument('once', '');
+                    foreach ($client->sendSync($req) as $r) {
+                        if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                        $ifName = $r->getProperty('name');
+                        if (preg_match('/^<pppoe-(.+)>$/', $ifName, $m)) {
+                            $user = $m[1];
+                            // rx = upload from user, tx = download to user
+                            $ifaceRates[$user] = [
+                                'rateRx' => (int) ($r->getProperty('rx-bits-per-second') ?? 0),
+                                'rateTx' => (int) ($r->getProperty('tx-bits-per-second') ?? 0),
+                            ];
+                        }
+                    }
+                } catch (Throwable $e) { /* interface monitor failed */ }
+            }
+
+            // 4. Combine session data with bytes and rates
+            foreach ($sessions as $s) {
+                $name = $s['name'];
+                $q = $queueByUser[$name] ?? ['bytesRx'=>0,'bytesTx'=>0];
+                $r = $ifaceRates[$name] ?? ['rateRx'=>0,'rateTx'=>0];
+                $out['sessions'][] = [
+                    'username' => $name,
+                    'fullname' => $custMap[$name] ?? '',
+                    'service'  => $s['service'],
+                    'address'  => $s['address'],
+                    'uptime'   => $s['uptime'],
+                    'callerId' => $s['callerId'],
+                    'bytesIn'  => $q['bytesRx'],
+                    'bytesOut' => $q['bytesTx'],
+                    'rateIn'   => $r['rateRx'],
+                    'rateOut'  => $r['rateTx'],
+                ];
+            }
 
             // 3. Hotspot active (best-effort)
             try {
@@ -1242,6 +1285,26 @@ switch ($action) {
                 . ($admin['username'] ?? '?'), 'User', $custId);
         }
         r2(U . 'customers/billing/' . $custId, 's', 'Credit marked as paid');
+        break;
+
+    case 'credit-edit':
+        // Edit a credit-sale amount. POST: credit_id, amount
+        $creditId = (int) _post('credit_id');
+        $newAmount = (float) _post('amount');
+        $cs = ORM::for_table('tbl_credit_sales')->find_one($creditId);
+        if (!$cs) {
+            r2(U . 'customers/credits', 'e', 'Credit sale not found');
+        }
+        if ($cs['status'] === 'paid') {
+            r2(U . 'customers/credits', 'e', 'Cannot edit a paid credit sale');
+        }
+        $oldAmount = $cs['amount'];
+        $cs->amount = $newAmount;
+        $cs->save();
+        _log('Credit #' . $creditId . ' (' . $cs['username'] . ') amount changed from '
+            . $oldAmount . ' to ' . $newAmount . ' BDT by '
+            . ($admin['username'] ?? '?'), 'User', (int) $cs['customer_id']);
+        r2(U . 'customers/credits', 's', 'Credit amount updated to ' . number_format($newAmount, 0) . ' BDT');
         break;
 
     case 'browsing':

@@ -75,6 +75,10 @@
                                     <td>{if $r['paid_at']}{$r['paid_at']}{else}&mdash;{/if}</td>
                                     <td>
                                         {if $r['status'] eq 'due'}
+                                            <button type="button" class="btn btn-warning btn-xs"
+                                                    onclick="editCredit({$r['id']}, '{$r['username']|escape:'javascript'}', {$r['amount']})">
+                                                <i class="ion ion-edit"></i> Edit
+                                            </button>
                                             <a href="{$_url}customers/credit-paid/{$r['id']}"
                                                class="btn btn-success btn-xs"
                                                onclick="return confirm('Mark this credit ({$_c['currency_code']} {$r['amount']}, {$r['plan_name']}) as paid?');">
@@ -103,5 +107,43 @@
         </div>
     </div>
 </div>
+
+<!-- Edit Credit Modal -->
+<div class="modal fade" id="editCreditModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <form method="post" action="{$_url}customers/credit-edit">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">Edit Credit Amount</h4>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="credit_id" id="edit_credit_id">
+                    <div class="form-group">
+                        <label>Customer</label>
+                        <input type="text" class="form-control" id="edit_username" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount ({$_c['currency_code']})</label>
+                        <input type="number" name="amount" id="edit_amount" class="form-control" min="0" step="1" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function editCredit(id, username, amount) {
+    document.getElementById('edit_credit_id').value = id;
+    document.getElementById('edit_username').value = username;
+    document.getElementById('edit_amount').value = amount;
+    $('#editCreditModal').modal('show');
+}
+</script>
 
 {include file="sections/footer.tpl"}

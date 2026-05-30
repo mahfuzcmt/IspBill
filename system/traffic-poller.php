@@ -3,7 +3,8 @@
  * NetPulse traffic poller — runs every minute from host cron.
  *
  * Snapshots:
- *   1. Per-PPPoE-session: rate (bits/sec) + bytes from /queue/simple
+ *   1. Per-PPPoE-session: rate (bits/sec) from /interface/monitor-traffic
+ *      (accurate, matches Winbox live display), bytes from /queue/simple,
  *      and rx-error / rx-drop from /interface/print on the
  *      <pppoe-USER> interface. Written to tbl_traffic_samples.
  *
@@ -34,27 +35,55 @@ try {
     $client = new RouterOS\Client($rt['ip_address'], $rt['username'], $rt['password']);
 
     // -----------------------------------------------------------------
-    // 1. Per-customer rates from /queue/simple/print stats=yes
+    // 1. Per-customer bytes from /queue/simple/print stats=yes
+    //    (bytes are cumulative and accurate from queue)
     // -----------------------------------------------------------------
-    $rateByUser = [];
+    $dataByUser = [];
+    $pppoeInterfaces = [];
     try {
         $req = new RouterOS\Request('/queue/simple/print');
         $req->setArgument('stats', 'yes');
-        $req->setArgument('.proplist', 'name,bytes,rate');
+        $req->setArgument('.proplist', 'name,bytes');
         foreach ($client->sendSync($req) as $r) {
             if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
             $qname = $r->getProperty('name');
             $user  = preg_match('/^<pppoe-(.+)>$/', $qname, $m) ? $m[1] : trim($qname, '<>');
             $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-            $rate  = explode('/', $r->getProperty('rate')  ?: '0/0');
-            $rateByUser[$user] = [
-                'rate_in'   => (int) ($rate[0]  ?? 0),  // bits/sec — queue rx = customer upload
-                'rate_out'  => (int) ($rate[1]  ?? 0),  // bits/sec — queue tx = customer download
+            $dataByUser[$user] = [
+                'rate_in'   => 0,  // Will be filled from interface/monitor-traffic
+                'rate_out'  => 0,
                 'bytes_in'  => (int) ($bytes[0] ?? 0),
                 'bytes_out' => (int) ($bytes[1] ?? 0),
             ];
+            $pppoeInterfaces[] = '<pppoe-' . $user . '>';
         }
     } catch (Throwable $e) { $errors[] = 'queue: ' . $e->getMessage(); }
+
+    // -----------------------------------------------------------------
+    // 1b. Per-customer rates from /interface/monitor-traffic (accurate,
+    //     matches Winbox live display)
+    // -----------------------------------------------------------------
+    if (!empty($pppoeInterfaces)) {
+        try {
+            $req = new RouterOS\Request('/interface/monitor-traffic');
+            $req->setArgument('interface', implode(',', $pppoeInterfaces));
+            $req->setArgument('once', '');
+            foreach ($client->sendSync($req) as $r) {
+                if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                $ifName = $r->getProperty('name');
+                if (preg_match('/^<pppoe-(.+)>$/', $ifName, $m)) {
+                    $user = $m[1];
+                    if (isset($dataByUser[$user])) {
+                        // Interface rx = traffic INTO router = customer upload
+                        // Interface tx = traffic OUT of router = customer download
+                        $dataByUser[$user]['rate_in']  = (int) ($r->getProperty('rx-bits-per-second') ?? 0);
+                        $dataByUser[$user]['rate_out'] = (int) ($r->getProperty('tx-bits-per-second') ?? 0);
+                    }
+                }
+            }
+        } catch (Throwable $e) { $errors[] = 'iface-monitor: ' . $e->getMessage(); }
+    }
+    $rateByUser = $dataByUser;
 
     // -----------------------------------------------------------------
     // 2. Per-customer interface errors (rx-error, rx-drop) per session

@@ -85,7 +85,7 @@ var WAN_DATA_URL = '{$_url}wan/data';
     function fmtRate(b) {
         if (!b || b < 0) return '0 bps';
         if (b < 1e3) return Math.round(b) + ' bps';
-        if (b < 1e6) return (b/1e3).toFixed(1) + ' Kbps';
+        if (b < 1e6) return (b/1e3).toFixed(1) + ' kbps';
         if (b < 1e9) return (b/1e6).toFixed(2) + ' Mbps';
         return (b/1e9).toFixed(2) + ' Gbps';
     }

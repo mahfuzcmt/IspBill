@@ -24,8 +24,8 @@
 							<div class="form-group">
 								<label class="col-md-2 control-label">{$_L['Type']}</label>
 								<div class="col-md-6">
-									<input type="radio" id="Hot" name="type" value="Hotspot"> {$_L['Hotspot_Plans']}
-									<input type="radio" id="POE" name="type" value="PPPOE"> {$_L['PPPOE_Plans']}
+									<input type="radio" id="Hot" name="type" value="Hotspot" {if $current_type eq 'Hotspot'}checked{/if}> {$_L['Hotspot_Plans']}
+									<input type="radio" id="POE" name="type" value="PPPOE" {if $current_type eq 'PPPOE' || $current_type eq 'PPPoE'}checked{/if}> {$_L['PPPOE_Plans']}
 								</div>
 							</div>
 							<div class="form-group">
@@ -33,6 +33,9 @@
 								<div class="col-md-6">
 									<select id="server" name="server" class="form-control">
 										<option value=''>Select Routers</option>
+										{foreach $r as $rs}
+											<option value="{$rs['name']}" {if $current_router eq $rs['name']}selected{/if}>{$rs['name']}</option>
+										{/foreach}
 									</select>
 								</div>
 							</div>
@@ -42,6 +45,9 @@
 								<div class="col-md-6">
 									<select id="plan" name="plan" class="form-control">
 										<option value=''>Select Plans</option>
+										{foreach $p as $ps}
+											<option value="{$ps['id']}" {if $current_plan eq $ps['id']}selected{/if}>{$ps['name_plan']} - {$ps['price']}</option>
+										{/foreach}
 									</select>
 								</div>
 							</div>
@@ -53,7 +59,7 @@
 										<input type="checkbox" name="credit_sale" value="1"> Credit Sale (Due)
 									</label>
 									<label class="checkbox-inline">
-										<input type="checkbox" name="send_sms" value="1" checked> Send SMS
+										<input type="checkbox" name="send_sms" value="1"> Send SMS
 									</label>
 								</div>
 							</div>

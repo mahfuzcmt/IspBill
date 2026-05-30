@@ -63,6 +63,19 @@ switch ($action) {
         $ui->assign('p', $p);
         $r = ORM::for_table('tbl_routers')->where('enabled', '1')->find_many();
         $ui->assign('r', $r);
+
+        // Fetch customer's current billing to pre-fill form
+        $current = ORM::for_table('tbl_user_recharges')->where('customer_id', $id)->find_one();
+        if ($current) {
+            $ui->assign('current_type', $current['type']);
+            $ui->assign('current_router', $current['routers']);
+            $ui->assign('current_plan', $current['plan_id']);
+        } else {
+            $ui->assign('current_type', '');
+            $ui->assign('current_router', '');
+            $ui->assign('current_plan', '');
+        }
+
         run_hook('view_recharge_customer'); #HOOK
         $ui->display('recharge-user.tpl');
         break;
