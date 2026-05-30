@@ -21,6 +21,12 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 .row span:first-child{color:#666}
 .row span:last-child{font-weight:600;color:#2d3436}
 .btn{display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;font-size:16px}
+.voucher-box{background:#fff3cd;border:2px solid #f39c12;border-radius:10px;padding:15px;margin:20px 0;text-align:left}
+.voucher-box h3{color:#856404;font-size:14px;margin-bottom:10px;text-align:center}
+.voucher-box ul{list-style:none;padding:0;margin:0}
+.voucher-box li{padding:6px 0;padding-left:15px;position:relative;font-size:12px;color:#856404;border-bottom:1px dashed #f39c12}
+.voucher-box li:last-child{border:none}
+.voucher-box li::before{content:">";position:absolute;left:0;font-weight:bold}
 .foot{padding:12px;background:#f8f9fa;font-size:11px;color:#636e72;text-align:center}
 </style>
 </head>
@@ -37,6 +43,14 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 <div class="stats">
 <div class="row"><span>সংযোগের সময়</span><span>$(uptime)</span></div>
 <div class="row"><span>মোট ডাটা ব্যবহার</span><span>$(bytes-total-nice)</span></div>
+</div>
+<div class="voucher-box">
+<h3>ভাউচার কিনুন</h3>
+<ul>
+<li>বাবুল স্টোর, নলডাঙ্গা পুলিশ ক্যাম্পের পাশে</li>
+<li>শিমুল হার্ডওয়্যার, ধান হাটা, নলডাঙ্গা বাজার</li>
+<li>আহাদ টেলিকম, আলিফ সুপার মার্কেট</li>
+</ul>
 </div>
 <a href="$(link-login)" class="btn">পুনরায় সংযোগ করুন</a>
 </div>

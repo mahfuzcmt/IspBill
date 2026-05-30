@@ -29,6 +29,14 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 .btn:disabled{opacity:0.6;cursor:not-allowed}
 .btn-voucher{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)}
 .btn-register{background:linear-gradient(135deg,#e17055 0%,#d63031 100%)}
+.btn-trial{background:linear-gradient(135deg,#f39c12 0%,#e67e22 100%);margin-top:10px}
+.trial-box{background:#fff3cd;border:2px solid #f39c12;border-radius:10px;padding:15px;margin-bottom:15px;text-align:center}
+.trial-box h3{color:#856404;font-size:14px;margin-bottom:8px}
+.trial-box p{color:#856404;font-size:12px;margin:0}
+.divider{text-align:center;margin:15px 0;color:#999;font-size:12px;position:relative}
+.divider::before,.divider::after{content:"";position:absolute;top:50%;width:40%;height:1px;background:#ddd}
+.divider::before{left:0}
+.divider::after{right:0}
 .info-box{background:#f8f9fa;border-radius:10px;padding:15px;margin-top:15px}
 .info-box h3{color:#2d3436;font-size:14px;margin-bottom:10px}
 .info-box ul{list-style:none;font-size:12px;color:#636e72;padding-left:0}
@@ -61,6 +69,22 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 <!-- Login Tab -->
 <div id="login" class="tab-content active">
 $(if error)<div class="err">$(error)</div>$(endif)
+
+<!-- Free Trial Section -->
+$(if trial)
+<div class="trial-box">
+<h3>* ১ ঘন্টা ফ্রি ইন্টারনেট *</h3>
+<p>প্রতিদিন ১ ঘন্টা বিনামূল্যে ইন্টারনেট ব্যবহার করুন</p>
+<form name="trial" action="$(link-login-only)" method="post">
+<input type="hidden" name="dst" value="$(link-orig)">
+<input type="hidden" name="popup" value="true">
+<input type="hidden" name="trial" value="yes">
+<button type="submit" class="btn btn-trial">ফ্রি ট্রায়াল শুরু করুন</button>
+</form>
+</div>
+<div class="divider">অথবা লগইন করুন</div>
+$(endif)
+
 <form name="login" action="$(link-login-only)" method="post" autocomplete="off">
 <input type="hidden" name="dst" value="$(link-orig)">
 <input type="hidden" name="popup" value="true">
