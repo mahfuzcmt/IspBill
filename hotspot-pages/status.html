@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta http-equiv="refresh" content="30;url=$(link-status)">
+<title>সেশন স্ট্যাটাস - AHAD WiFi Zone</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:15px}
+.box{background:#fff;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.3);width:100%;max-width:400px;overflow:hidden}
+.head{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:20px;text-align:center;color:#fff}
+.head h1{font-size:22px;margin-bottom:5px}
+.head p{font-size:13px;opacity:0.8}
+.content{padding:20px}
+.badge{display:inline-block;background:linear-gradient(135deg,#00b894 0%,#00cec9 100%);color:#fff;padding:8px 20px;border-radius:20px;font-weight:600;font-size:14px;margin-bottom:15px}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:15px}
+.stat{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:10px;padding:15px;text-align:center;color:#fff}
+.stat.green{background:linear-gradient(135deg,#00b894 0%,#00cec9 100%)}
+.stat-value{font-size:20px;font-weight:bold}
+.stat-label{font-size:11px;opacity:0.9;margin-top:5px}
+.info{background:#f8f9fa;border-radius:10px;padding:15px;margin-bottom:15px}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #ddd;font-size:13px}
+.row:last-child{border:none}
+.row span:first-child{color:#666}
+.row span:last-child{font-weight:600;color:#2d3436}
+.actions{display:flex;gap:10px}
+.btn{flex:1;padding:12px;border:none;border-radius:10px;font-weight:600;font-size:14px;text-align:center;text-decoration:none;cursor:pointer}
+.btn-logout{background:linear-gradient(135deg,#d63031 0%,#e17055 100%);color:#fff}
+.btn-refresh{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff}
+.note{font-size:10px;color:#999;text-align:center;margin-top:10px}
+.foot{padding:12px;background:#f8f9fa;font-size:11px;color:#636e72;text-align:center}
+</style>
+</head>
+<body>
+<div class="box">
+<div class="head">
+<h1>AHAD WiFi Zone</h1>
+<p>ইন্টারনেট সেবায় স্বাগতম</p>
+</div>
+<div class="content">
+<div style="text-align:center"><span class="badge">* সংযুক্ত</span></div>
+<div class="stat-grid">
+<div class="stat green">
+<div class="stat-value">$(uptime)</div>
+<div class="stat-label">সংযোগের সময়</div>
+</div>
+<div class="stat">
+<div class="stat-value">$(session-time-left)</div>
+<div class="stat-label">অবশিষ্ট সময়</div>
+</div>
+</div>
+<div class="stat-grid">
+<div class="stat green">
+<div class="stat-value">$(bytes-in-nice)</div>
+<div class="stat-label">ডাউনলোড</div>
+</div>
+<div class="stat">
+<div class="stat-value">$(bytes-out-nice)</div>
+<div class="stat-label">আপলোড</div>
+</div>
+</div>
+<div class="info">
+<div class="row"><span>ব্যবহারকারী</span><span>$(username)</span></div>
+<div class="row"><span>আইপি ঠিকানা</span><span>$(ip)</span></div>
+<div class="row"><span>ম্যাক ঠিকানা</span><span>$(mac)</span></div>
+</div>
+<div class="actions">
+<a href="$(link-logout)" class="btn btn-logout">লগআউট</a>
+<a href="$(link-status)" class="btn btn-refresh">রিফ্রেশ</a>
+</div>
+<p class="note">প্রতি ৩০ সেকেন্ডে স্বয়ংক্রিয় রিফ্রেশ</p>
+</div>
+<div class="foot">Powered by AHAD Network | আহাদ নেটওয়ার্ক<br><span style="font-size:12px;color:#667eea">০১৯৭৫ ৫৮ ৫৯ ৬০</span></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta http-equiv="pragma" content="no-cache">
+<meta http-equiv="expires" content="-1">
+<title>AHAD WiFi Zone</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:10px}
+.box{background:#fff;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.3);width:100%;max-width:380px;overflow:hidden}
+.head{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:20px;text-align:center}
+.head h1{color:#fff;font-size:22px;margin-bottom:5px}
+.head p{color:rgba(255,255,255,0.8);font-size:13px}
+.tabs{display:flex;background:#f0f0f0}
+.tab{flex:1;padding:10px 5px;text-align:center;cursor:pointer;font-weight:600;color:#666;border-bottom:3px solid transparent;transition:all 0.3s;font-size:13px}
+.tab.active{background:#fff;color:#667eea;border-bottom-color:#667eea}
+.tab-content{display:none;padding:20px}
+.tab-content.active{display:block}
+.err{background:#ffe6e6;color:#d63031;padding:10px;border-radius:8px;margin-bottom:15px;font-size:13px;border-left:4px solid #d63031}
+.success{background:#d4edda;color:#155724;padding:10px;border-radius:8px;margin-bottom:15px;font-size:13px;border-left:4px solid #28a745}
+.field{margin-bottom:14px}
+.field label{display:block;font-weight:600;margin-bottom:6px;color:#2d3436;font-size:13px}
+.field input{width:100%;padding:12px 14px;border:2px solid #e0e0e0;border-radius:10px;font-size:15px;transition:all 0.3s}
+.field input:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,0.1)}
+.btn{width:100%;padding:14px;background:linear-gradient(135deg,#00b894 0%,#00cec9 100%);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer}
+.btn:hover{opacity:0.9}
+.btn:disabled{opacity:0.6;cursor:not-allowed}
+.btn-voucher{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)}
+.btn-register{background:linear-gradient(135deg,#e17055 0%,#d63031 100%)}
+.info-box{background:#f8f9fa;border-radius:10px;padding:15px;margin-top:15px}
+.info-box h3{color:#2d3436;font-size:14px;margin-bottom:10px}
+.info-box ul{list-style:none;font-size:12px;color:#636e72;padding-left:0}
+.info-box li{padding:6px 0;border-bottom:1px dashed #ddd;padding-left:15px;position:relative}
+.info-box li:last-child{border:none}
+.info-box li::before{content:">";position:absolute;left:0;color:#667eea;font-weight:bold}
+.info-box ol{font-size:12px;color:#636e72;padding-left:20px;margin:0}
+.info-box ol li{padding:4px 0;border:none}
+.info-box ol li::before{display:none}
+.foot{text-align:center;padding:12px;background:#f8f9fa;font-size:11px;color:#636e72}
+.note{font-size:11px;color:#636e72;margin-top:10px;padding:10px;background:#f0f0f0;border-radius:8px}
+.pw-display{background:#e8f5e9;padding:15px;border-radius:10px;text-align:center;margin:15px 0}
+.pw-display .label{font-size:12px;color:#666;margin-bottom:5px}
+.pw-display .value{font-size:24px;font-weight:bold;color:#00b894;letter-spacing:3px}
+</style>
+</head>
+<body>
+<div class="box">
+<div class="head">
+<h1>AHAD WiFi Zone</h1>
+<p>ইন্টারনেট সেবায় স্বাগতম</p>
+</div>
+
+<div class="tabs">
+<div class="tab active" onclick="showTab('login')">সাইন ইন</div>
+<div class="tab" onclick="showTab('register')">রেজিস্টার</div>
+<div class="tab" onclick="showTab('voucher')">ভাউচার</div>
+</div>
+
+<!-- Login Tab -->
+<div id="login" class="tab-content active">
+$(if error)<div class="err">$(error)</div>$(endif)
+<form name="login" action="$(link-login-only)" method="post" autocomplete="off">
+<input type="hidden" name="dst" value="$(link-orig)">
+<input type="hidden" name="popup" value="true">
+<div class="field">
+<label>মোবাইল নম্বর</label>
+<input type="tel" name="username" placeholder="01XXXXXXXXX" required autofocus autocomplete="off">
+</div>
+<div class="field">
+<label>পাসওয়ার্ড (শেষ ৬ সংখ্যা)</label>
+<input type="password" name="password" placeholder="XXXXXX" required autocomplete="off">
+</div>
+<button type="submit" class="btn">সংযোগ করুন</button>
+</form>
+
+<div class="note">
+নতুন ব্যবহারকারী? "রেজিস্টার" ট্যাবে ক্লিক করুন
+</div>
+</div>
+
+<!-- Register Tab -->
+<div id="register" class="tab-content">
+<div id="reg-step1">
+<div id="reg-message"></div>
+<form id="registerForm" autocomplete="off">
+<div class="field">
+<label>মোবাইল নম্বর</label>
+<input type="tel" id="reg-phone" placeholder="01XXXXXXXXX" required autocomplete="off" maxlength="11">
+</div>
+<div class="field">
+<label>আপনার নাম</label>
+<input type="text" id="reg-name" placeholder="আপনার পুরো নাম" required autocomplete="off">
+</div>
+<button type="submit" class="btn btn-register" id="reg-btn">রেজিস্টার করুন</button>
+</form>
+
+<div class="info-box">
+<h3>রেজিস্ট্রেশনের নিয়ম:</h3>
+<ol>
+<li>আপনার মোবাইল নম্বর দিন (01XXXXXXXXX)</li>
+<li>আপনার নাম লিখুন</li>
+<li>পাসওয়ার্ড হবে মোবাইলের শেষ ৬ সংখ্যা</li>
+<li>যেমন: 01975585960 = পাসওয়ার্ড 585960</li>
+</ol>
+</div>
+</div>
+
+<div id="reg-step2" style="display:none">
+<div class="success">রেজিস্ট্রেশন সফল হয়েছে!</div>
+<div class="pw-display">
+<div class="label">আপনার লগইন তথ্য</div>
+<div style="margin:10px 0">
+<strong>মোবাইল:</strong> <span id="show-phone"></span>
+</div>
+<div class="label">পাসওয়ার্ড</div>
+<div class="value" id="show-password"></div>
+</div>
+<p style="text-align:center;color:#666;font-size:13px;margin-bottom:15px">
+এই পাসওয়ার্ড মনে রাখুন! এখন সাইন ইন করুন।
+</p>
+<button onclick="goToLogin()" class="btn">সাইন ইন করুন</button>
+</div>
+</div>
+
+<!-- Voucher Tab -->
+<div id="voucher" class="tab-content">
+$(if error)<div class="err">$(error)</div>$(endif)
+<form name="voucher" action="$(link-login-only)" method="post" autocomplete="off">
+<input type="hidden" name="dst" value="$(link-orig)">
+<input type="hidden" name="popup" value="true">
+<div class="field">
+<label>ভাউচার কোড</label>
+<input type="text" name="username" placeholder="ভাউচার কোড লিখুন" required autocomplete="off" style="text-transform:uppercase;letter-spacing:2px">
+</div>
+<input type="hidden" name="password" value="">
+<button type="submit" class="btn btn-voucher" onclick="setVoucherPassword()">ভাউচার রিডিম করুন</button>
+</form>
+
+<div class="info-box">
+<h3>ভাউচার কিনুন:</h3>
+<ul>
+<li>বাবুল স্টোর, নলডাঙ্গা পুলিশ ক্যাম্পের পাশে</li>
+<li>শিমুল হার্ডওয়্যার, ধান হাটা, নলডাঙ্গা বাজার</li>
+<li>আহাদ টেলিকম, আলিফ সুপার মার্কেট</li>
+</ul>
+</div>
+</div>
+
+<div class="foot">
+Powered by AHAD Network | আহাদ নেটওয়ার্ক<br>
+<span style="font-size:12px;color:#667eea">কল করুন ০১৯৭৫ ৫৮ ৫৯ ৬০</span>
+</div>
+</div>
+
+<script>
+function showTab(tabId) {
+    var tabs = document.querySelectorAll('.tab');
+    var contents = document.querySelectorAll('.tab-content');
+    for(var i=0; i<tabs.length; i++) tabs[i].classList.remove('active');
+    for(var i=0; i<contents.length; i++) contents[i].classList.remove('active');
+    document.getElementById(tabId).classList.add('active');
+    var idx = tabId==='login'?0:tabId==='register'?1:2;
+    tabs[idx].classList.add('active');
+}
+
+function goToLogin() {
+    document.getElementById('reg-step1').style.display = 'block';
+    document.getElementById('reg-step2').style.display = 'none';
+    showTab('login');
+}
+
+function setVoucherPassword() {
+    var code = document.querySelector('#voucher input[name="username"]').value;
+    document.querySelector('#voucher input[name="password"]').value = code;
+}
+
+document.querySelector('#voucher form').onsubmit = function() {
+    var code = document.querySelector('#voucher input[name="username"]').value;
+    document.querySelector('#voucher input[name="password"]').value = code;
+    return true;
+};
+
+// Registration - direct to Mikrotik API
+document.getElementById('registerForm').onsubmit = function(e) {
+    e.preventDefault();
+
+    var phone = document.getElementById('reg-phone').value.replace(/\s/g,'');
+    var name = document.getElementById('reg-name').value.trim();
+    var btn = document.getElementById('reg-btn');
+    var msg = document.getElementById('reg-message');
+
+    if (!/^01[0-9]{9}$/.test(phone)) {
+        msg.innerHTML = '<div class="err">সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)</div>';
+        return;
+    }
+    if (name.length < 2) {
+        msg.innerHTML = '<div class="err">আপনার নাম দিন</div>';
+        return;
+    }
+
+    var password = phone.slice(-6);
+    btn.disabled = true;
+    btn.textContent = 'অপেক্ষা করুন...';
+    msg.innerHTML = '';
+
+    // Try to create user via nginx proxy API (handles auth)
+    var xhr = new XMLHttpRequest();
+    xhr.open('PUT', 'http://103.187.22.131:8090/api/hotspot-register', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.timeout = 10000;
+
+    xhr.onload = function() {
+        btn.disabled = false;
+        btn.textContent = 'রেজিস্টার করুন';
+
+        if (xhr.status === 201 || xhr.status === 200) {
+            document.getElementById('show-phone').textContent = phone;
+            document.getElementById('show-password').textContent = password;
+            document.getElementById('reg-step1').style.display = 'none';
+            document.getElementById('reg-step2').style.display = 'block';
+            document.getElementById('reg-phone').value = '';
+            document.getElementById('reg-name').value = '';
+        } else if (xhr.status === 400) {
+            msg.innerHTML = '<div class="err">এই নম্বর আগেই রেজিস্টার করা হয়েছে।<br>পাসওয়ার্ড: <strong>' + password + '</strong></div>';
+        } else {
+            msg.innerHTML = '<div class="err">রেজিস্ট্রেশনের জন্য কল করুন:<br><strong>০১৯৭৫ ৫৮ ৫৯ ৬০</strong></div>';
+        }
+    };
+
+    xhr.onerror = function() {
+        btn.disabled = false;
+        btn.textContent = 'রেজিস্টার করুন';
+        msg.innerHTML = '<div class="err">রেজিস্ট্রেশনের জন্য কল করুন:<br><strong>০১৯৭৫ ৫৮ ৫৯ ৬০</strong></div>';
+    };
+
+    xhr.ontimeout = function() {
+        btn.disabled = false;
+        btn.textContent = 'রেজিস্টার করুন';
+        msg.innerHTML = '<div class="err">রেজিস্ট্রেশনের জন্য কল করুন:<br><strong>০১৯৭৫ ৫৮ ৫৯ ৬০</strong></div>';
+    };
+
+    xhr.send(JSON.stringify({
+        name: phone,
+        password: password,
+        profile: 'default',
+        comment: name
+    }));
+};
+</script>
+</body>
+</html>
