@@ -129,36 +129,18 @@ var GRAPH_URL  = '{$_url}customers/graph-data/' + encodeURIComponent(GRAPH_USER)
     // Mikrotik /queue/simple "rate" is already in bits/sec — earlier we multiplied
     // by 8, which made every reading 8x too high (a 75 Mbps capped session looked
     // like ~600 Mbps). Verified by cross-checking against (delta_bytes / delta_sec).
+    // Always display in Mbps for consistency
     function fmtRate(bps) {
-        if (!bps || bps < 0) return '0 bps';
-        if (bps < 1000) return Math.round(bps) + ' bps';
-        if (bps < 1e6) return (bps/1000).toFixed(1) + ' kbps';
-        if (bps < 1e9) return (bps/1e6).toFixed(2) + ' Mbps';
-        return (bps/1e9).toFixed(2) + ' Gbps';
+        if (!bps || bps < 0) return '0.00 Mbps';
+        return (bps/1e6).toFixed(2) + ' Mbps';
     }
 
-    // Track current chart unit for tooltip formatting
+    // Always use Mbps for consistency
     var chartUnit = 'Mbps';
     var chartDivisor = 1e6;
 
     function buildChart(samples) {
         var canvas = document.getElementById('g-chart');
-
-        // Find max rate to determine best unit
-        var maxRate = 0;
-        samples.forEach(function (s) {
-            if (s.rateIn > maxRate) maxRate = s.rateIn;
-            if (s.rateOut > maxRate) maxRate = s.rateOut;
-        });
-
-        // Choose unit: kbps if max < 1 Mbps, otherwise Mbps
-        if (maxRate < 1e6) {
-            chartUnit = 'kbps';
-            chartDivisor = 1000;
-        } else {
-            chartUnit = 'Mbps';
-            chartDivisor = 1e6;
-        }
 
         var dataIn  = samples.map(function (s) { return { x: s.ts, y: s.rateIn  / chartDivisor }; });
         var dataOut = samples.map(function (s) { return { x: s.ts, y: s.rateOut / chartDivisor }; });

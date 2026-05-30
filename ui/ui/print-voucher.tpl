@@ -13,15 +13,16 @@
     }
     body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 12px;
+        font-size: 10px;
         background: #f5f5f5;
     }
     page[size="A4"] {
         background: white;
         width: 21cm;
+        height: 29.7cm;
         display: block;
         margin: 0 auto;
-        padding: 1cm;
+        padding: 0.3cm;
     }
     .no-print {
         background: #fff;
@@ -65,107 +66,97 @@
         margin-top: 10px;
     }
 
-    /* Voucher Grid */
+    /* Voucher Grid - 4 columns */
     .voucher-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 15px;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
     }
 
-    /* Voucher Card */
+    /* Compact Voucher Card */
     .voucher-card {
-        border: 2px dashed #667eea;
-        border-radius: 12px;
-        padding: 15px;
+        border: 1.5px dashed #667eea;
+        border-radius: 6px;
+        padding: 6px;
         background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
         page-break-inside: avoid;
+        height: 5.6cm;
     }
     .voucher-header {
         text-align: center;
-        padding-bottom: 10px;
+        padding-bottom: 4px;
         border-bottom: 1px solid #eee;
-        margin-bottom: 10px;
+        margin-bottom: 4px;
     }
     .voucher-header h3 {
         color: #1a1a2e;
-        font-size: 16px;
-        margin-bottom: 3px;
+        font-size: 10px;
+        font-weight: bold;
+        margin-bottom: 1px;
     }
     .voucher-header p {
         color: #667eea;
-        font-size: 11px;
+        font-size: 7px;
     }
     .voucher-body {
-        display: flex;
-        gap: 15px;
-        align-items: center;
+        text-align: center;
     }
     .qr-section {
-        flex-shrink: 0;
+        margin-bottom: 4px;
     }
     .qr-section img {
-        width: 80px;
-        height: 80px;
-        border: 2px solid #667eea;
-        border-radius: 8px;
-        padding: 4px;
+        width: 50px;
+        height: 50px;
+        border: 1px solid #667eea;
+        border-radius: 4px;
+        padding: 2px;
         background: white;
-    }
-    .info-section {
-        flex-grow: 1;
     }
     .code-display {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
         color: white;
-        padding: 10px;
-        border-radius: 8px;
+        padding: 4px 6px;
+        border-radius: 4px;
         text-align: center;
-        margin-bottom: 8px;
+        margin-bottom: 4px;
     }
     .code-label {
-        font-size: 10px;
+        font-size: 6px;
         color: rgba(255,255,255,0.7);
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
     }
     .code-value {
-        font-size: 18px;
+        font-size: 11px;
         font-weight: bold;
-        letter-spacing: 2px;
-        margin-top: 3px;
+        letter-spacing: 1px;
+        margin-top: 1px;
     }
     .plan-info {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: 4px;
     }
     .plan-name {
-        font-size: 12px;
+        font-size: 8px;
         color: #333;
         font-weight: 600;
     }
     .plan-price {
         background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
         color: white;
-        padding: 5px 12px;
-        border-radius: 20px;
+        padding: 2px 6px;
+        border-radius: 10px;
         font-weight: bold;
-        font-size: 13px;
+        font-size: 9px;
     }
     .voucher-footer {
         text-align: center;
-        margin-top: 10px;
-        padding-top: 8px;
+        padding-top: 3px;
         border-top: 1px dashed #ddd;
-        font-size: 10px;
+        font-size: 7px;
         color: #999;
-    }
-    .voucher-id {
-        position: absolute;
-        top: 5px;
-        right: 10px;
-        font-size: 9px;
-        color: #ccc;
     }
 
     /* Print Styles */
@@ -175,14 +166,14 @@
         }
         page[size="A4"] {
             margin: 0;
-            padding: 0.5cm;
+            padding: 0.3cm;
             box-shadow: none;
         }
         .no-print {
             display: none !important;
         }
         .voucher-card {
-            border: 2px dashed #000;
+            border: 1.5px dashed #000;
         }
         .page-break {
             page-break-before: always;
@@ -223,26 +214,24 @@
             <div class="voucher-card">
                 <div class="voucher-header">
                     <h3>AHAD WiFi Zone</h3>
-                    <p>Scan QR or enter code to connect</p>
+                    <p>Scan QR or enter code</p>
                 </div>
                 <div class="voucher-body">
                     <div class="qr-section">
-                        <img src="qrcode/?data={$vs['code']}" alt="QR Code">
+                        <img src="qrcode/?data={$vs['code']}" alt="QR">
                     </div>
-                    <div class="info-section">
-                        <div class="code-display">
-                            <div class="code-label">Voucher Code</div>
-                            <div class="code-value">{$vs['code']}</div>
-                        </div>
-                        <div class="plan-info">
-                            <span class="plan-name">{$vs['name_plan']}</span>
-                            <span class="plan-price">{$_c['currency_code']} {number_format($vs['price'],0)}</span>
-                        </div>
+                    <div class="code-display">
+                        <div class="code-label">Code</div>
+                        <div class="code-value">{$vs['code']}</div>
+                    </div>
+                    <div class="plan-info">
+                        <span class="plan-name">{$vs['name_plan']}</span>
+                        <span class="plan-price">{$_c['currency_code']} {number_format($vs['price'],0)}</span>
                     </div>
                 </div>
                 <div class="voucher-footer">
-                    {$_c['CompanyName']|default:'AHAD Network'} | {$_c['phone']|default:''}
-                    <span class="no-print" style="display:block;color:#aaa;font-size:8px">ID: {$vs['id']}</span>
+                    {$_c['CompanyName']|default:'AHAD Network'}
+                    <span class="no-print" style="display:block;color:#aaa;font-size:6px">ID: {$vs['id']}</span>
                 </div>
             </div>
 
