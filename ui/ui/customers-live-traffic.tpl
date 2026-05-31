@@ -5,10 +5,13 @@
         <div class="panel panel-hovered mb20 panel-primary">
             <div class="panel-heading">
                 Live Traffic Monitor
-                <span class="pull-right">
-                    <small id="lt-status" class="text-muted">connecting…</small>
+                <span class="pull-right" style="color:#fff">
+                    {* Inline light colors: panel-primary heading has a dark blue
+                       background, so the Bootstrap text-muted / text-success /
+                       text-danger defaults render too dark to read. *}
+                    <small id="lt-status" style="color:#cfe9ff">connecting…</small>
                     &nbsp;&nbsp;
-                    <small id="lt-summary" class="text-muted"></small>
+                    <small id="lt-summary" style="color:#cfe9ff"></small>
                 </span>
             </div>
             <div class="panel-body">
@@ -72,12 +75,14 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
         var body = document.getElementById('lt-body');
 
         if (data.error) {
-            status.className = 'text-danger';
+            // Light red — readable on the dark panel-primary heading.
+            status.style.color = '#ffb3b3';
             status.textContent = '⚠ ' + data.error;
             return;
         }
         var now = Date.now();
-        status.className = 'text-success';
+        // Light green — readable on the dark panel-primary heading.
+        status.style.color = '#b6f5b6';
         status.textContent = '● live  (' + new Date(now).toLocaleTimeString() + ')';
 
         var rows = [];
@@ -141,7 +146,7 @@ var LIVE_TRAFFIC_URL = '{$_url}customers/live-traffic-data';
             .then(render)
             .catch(function (e) {
                 var s = document.getElementById('lt-status');
-                s.className = 'text-danger';
+                s.style.color = '#ffb3b3';
                 s.textContent = '⚠ ' + e.message;
             })
             .finally(function () { setTimeout(poll, POLL_MS); });

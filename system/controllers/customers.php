@@ -948,27 +948,28 @@ switch ($action) {
                 $custMap[$c['username']] = $c['fullname'];
             }
 
-            // 1. Queue stats map for cumulative bytes (PPPoE dynamic queues)
-            $queueByUser = [];
+            // 1. Cumulative session bytes from the PPPoE interface itself.
+            //    We used to read /queue/simple bytes here, but that counter resets
+            //    whenever the dynamic queue is touched (profile change, brief PPP
+            //    flap, any external /queue write), so the totals were not really
+            //    session-cumulative. /interface stats rx-byte/tx-byte is set when
+            //    the dynamic <pppoe-USER> interface is created at session start
+            //    and isn't touched again until disconnect.
+            $bytesByUser = [];
             try {
-                $req = new RouterOS\Request('/queue/simple/print');
+                $req = new RouterOS\Request('/interface/print');
                 $req->setArgument('stats', 'yes');
-                $req->setArgument('.proplist', 'name,bytes');
+                $req->setArgument('.proplist', 'name,rx-byte,tx-byte');
                 foreach ($client->sendSync($req) as $r) {
                     if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                    $qname = $r->getProperty('name');
-                    if (preg_match('/^<pppoe-(.+)>$/', $qname, $m)) {
-                        $user = $m[1];
-                    } else {
-                        $user = trim($qname, '<>');
-                    }
-                    $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-                    $queueByUser[$user] = [
-                        'bytesRx' => (int) ($bytes[0] ?? 0),
-                        'bytesTx' => (int) ($bytes[1] ?? 0),
+                    $ifName = (string) $r->getProperty('name');
+                    if (!preg_match('/^<pppoe-(.+)>$/', $ifName, $m)) continue;
+                    $bytesByUser[$m[1]] = [
+                        'bytesRx' => (int) $r->getProperty('rx-byte'),
+                        'bytesTx' => (int) $r->getProperty('tx-byte'),
                     ];
                 }
-            } catch (Throwable $e) { /* no dynamic queues */ }
+            } catch (Throwable $e) { /* no pppoe interfaces visible */ }
 
             // 2. Active PPP sessions (IP/uptime/caller-id)
             $sessions = [];
@@ -1014,7 +1015,7 @@ switch ($action) {
             // 4. Combine session data with bytes and rates
             foreach ($sessions as $s) {
                 $name = $s['name'];
-                $q = $queueByUser[$name] ?? ['bytesRx'=>0,'bytesTx'=>0];
+                $q = $bytesByUser[$name] ?? ['bytesRx'=>0,'bytesTx'=>0];
                 $r = $ifaceRates[$name] ?? ['rateRx'=>0,'rateTx'=>0];
                 $out['sessions'][] = [
                     'username' => $name,
