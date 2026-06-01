@@ -245,6 +245,84 @@ class Mikrotik
         }
     }
 
+    /**
+     * Add a hotspot user via the RouterOS v7 REST API (port 80), skipping if
+     * one already exists. Used by the self-service registration endpoint.
+     *
+     * REST is used here (rather than the PEAR2 legacy API on 8728) because it
+     * is the proven path on this deployment — the same one the nginx
+     * router-proxy uses (PUT /rest/ip/hotspot/user). The legacy API returns
+     * "Unrecognized response type" for the add on this RouterOS version.
+     *
+     * Returns true if created, false if it already existed. Throws on a
+     * connection/HTTP failure so the caller can try another router.
+     *
+     * @param string $ip ip_address from tbl_routers (may include :apiport,
+     *                    which is ignored — REST is on http/80)
+     */
+    public static function addHotspotUserRest($ip, $user, $pass, $name, $password, $profile = 'default', $comment = '')
+    {
+        $host = explode(':', $ip)[0];
+        $base = 'http://' . $host . '/rest/ip/hotspot/user';
+
+        // Existence check
+        $check = self::restRequest($base . '?name=' . rawurlencode($name), 'GET', null, $user, $pass);
+        if (!$check['ok']) {
+            throw new Exception('REST unreachable (' . $check['error'] . ')');
+        }
+        if (is_array($check['data']) && count($check['data']) > 0) {
+            return false; // already exists
+        }
+
+        $payload = ['name' => $name, 'password' => $password, 'profile' => $profile];
+        if ($comment !== '') {
+            $payload['comment'] = $comment;
+        }
+        $add = self::restRequest($base, 'PUT', $payload, $user, $pass);
+        if (!$add['ok']) {
+            throw new Exception('REST add failed (' . $add['error'] . ')');
+        }
+        return true;
+    }
+
+    /**
+     * Minimal RouterOS REST helper using the built-in HTTP stream wrapper
+     * (the curl extension is not installed in the app container). Returns
+     * ['ok' => bool, 'error' => string, 'data' => mixed].
+     */
+    private static function restRequest($url, $method, $body, $user, $pass)
+    {
+        $headers = ['Authorization: Basic ' . base64_encode($user . ':' . $pass)];
+        $http = [
+            'method'        => $method,
+            'timeout'       => 8,
+            'ignore_errors' => true, // still read body on 4xx/5xx
+        ];
+        if ($body !== null) {
+            $headers[] = 'Content-Type: application/json';
+            $http['content'] = json_encode($body);
+        }
+        $http['header'] = implode("\r\n", $headers);
+
+        $ctx  = stream_context_create(['http' => $http]);
+        $resp = @file_get_contents($url, false, $ctx);
+
+        // The wrapper populates $http_response_header in local scope.
+        $code = 0;
+        if (isset($http_response_header[0])
+            && preg_match('#HTTP/\S+\s+(\d+)#', $http_response_header[0], $m)) {
+            $code = (int) $m[1];
+        }
+        if ($resp === false && $code === 0) {
+            return ['ok' => false, 'error' => 'connection failed', 'data' => null];
+        }
+        return [
+            'ok'    => ($code >= 200 && $code < 300),
+            'error' => 'HTTP ' . $code,
+            'data'  => json_decode((string) $resp, true),
+        ];
+    }
+
     public static function setHotspotUser($client, $user, $pass, $nuser= null){
         $printRequest = new RouterOS\Request('/ip/hotspot/user/print');
         $printRequest->setArgument('.proplist', '.id');

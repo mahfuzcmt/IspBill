@@ -16,6 +16,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// Needed for the PEAR2 RouterOS client used by Mikrotik:: helpers; this is
+// not registered globally, so each controller that talks to Mikrotik loads it.
+require_once 'system/autoload/PEAR2/Autoload.php';
+
 $action = $routes['1'];
 
 switch ($action) {
@@ -82,32 +86,25 @@ function hotspot_register() {
         $customer->created_at = date('Y-m-d H:i:s');
         $customer->save();
 
-        // Create hotspot user on Mikrotik
-        $router = ORM::for_table('tbl_routers')
-            ->where('enabled', 'yes')
-            ->find_one();
+        // Create hotspot user on Mikrotik. The enabled column is a tinyint(1),
+        // so match 1 (not the legacy 'yes'). Try each enabled router until one
+        // connects — tryClient() returns null instead of die()-ing, so an
+        // unreachable router never aborts the JSON response or rolls back the
+        // customer we just created in the database.
+        $routers = ORM::for_table('tbl_routers')
+            ->where('enabled', 1)
+            ->find_many();
 
-        if ($router) {
-            // tryClient() returns null on failure instead of die()-ing, so a
-            // momentarily unreachable router never aborts the JSON response or
-            // rolls back the customer we just created in the database.
-            $client = Mikrotik::tryClient($router['ip_address'], $router['username'], $router['password']);
-
-            if ($client) {
-                // Check if hotspot user already exists
-                $printRequest = new \RouterOS\Request('/ip/hotspot/user/print');
-                $printRequest->setArgument('.proplist', '.id,name');
-                $printRequest->setQuery(\RouterOS\Query::where('name', $phone));
-                $users = $client->sendSync($printRequest)->toArray();
-
-                if (empty($users)) {
-                    // Create new hotspot user
-                    $addRequest = new \RouterOS\Request('/ip/hotspot/user/add');
-                    $addRequest->setArgument('name', $phone);
-                    $addRequest->setArgument('password', $password);
-                    $addRequest->setArgument('profile', 'default');
-                    $client->sendSync($addRequest);
-                }
+        foreach ($routers as $router) {
+            try {
+                Mikrotik::addHotspotUserRest(
+                    $router['ip_address'], $router['username'], $router['password'],
+                    $phone, $password, 'default', $name
+                );
+                break; // created (or already present) on a reachable router
+            } catch (Throwable $e) {
+                _log("Hotspot Registration: Mikrotik add failed on {$router['ip_address']}: " . $e->getMessage());
+                continue;
             }
         }
 
