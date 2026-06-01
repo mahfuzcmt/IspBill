@@ -70,15 +70,16 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 <div id="login" class="tab-content active">
 $(if error)<div class="err">$(error)</div>$(endif)
 
-<!-- Free Trial Section -->
-$(if trial)
+<!-- Free Trial Section (only shown when the client is still trial-eligible) -->
+$(if trial == 'yes')
 <div class="trial-box">
 <h3>* ১ ঘন্টা ফ্রি ইন্টারনেট *</h3>
 <p>প্রতিদিন ১ ঘন্টা বিনামূল্যে ইন্টারনেট ব্যবহার করুন</p>
 <form name="trial" action="$(link-login-only)" method="post">
 <input type="hidden" name="dst" value="$(link-orig)">
 <input type="hidden" name="popup" value="true">
-<input type="hidden" name="trial" value="yes">
+<!-- Mikrotik native trial: log in with username T-<client MAC>, no password -->
+<input type="hidden" name="username" value="T-$(mac)">
 <button type="submit" class="btn btn-trial">ফ্রি ট্রায়াল শুরু করুন</button>
 </form>
 </div>
