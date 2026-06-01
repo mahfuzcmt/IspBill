@@ -229,48 +229,53 @@ document.getElementById('registerForm').onsubmit = function(e) {
     btn.textContent = 'অপেক্ষা করুন...';
     msg.innerHTML = '';
 
-    // Try to create user via nginx proxy API (handles auth)
-    var xhr = new XMLHttpRequest();
-    xhr.open('PUT', 'http://103.187.22.131:8090/api/hotspot-register', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.timeout = 10000;
+    var callMsg = '<div class="err">রেজিস্ট্রেশনের জন্য কল করুন:<br><strong>০১৯৭৫ ৫৮ ৫৯ ৬০</strong></div>';
 
-    xhr.onload = function() {
+    function resetBtn() {
         btn.disabled = false;
         btn.textContent = 'রেজিস্টার করুন';
+    }
 
-        if (xhr.status === 201 || xhr.status === 200) {
+    // Register via the billing system API. This creates the customer in the
+    // billing database AND the hotspot user on Mikrotik in a single call.
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'http://103.187.22.131:8081/index.php?_route=api/hotspot-register', true);
+    // urlencoded keeps this a CORS "simple" request (no preflight) and matches $_POST.
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.timeout = 15000;
+
+    xhr.onload = function() {
+        resetBtn();
+
+        var res = null;
+        try { res = JSON.parse(xhr.responseText); } catch (err) { res = null; }
+
+        if (res && res.success) {
             document.getElementById('show-phone').textContent = phone;
             document.getElementById('show-password').textContent = password;
             document.getElementById('reg-step1').style.display = 'none';
             document.getElementById('reg-step2').style.display = 'block';
             document.getElementById('reg-phone').value = '';
             document.getElementById('reg-name').value = '';
-        } else if (xhr.status === 400) {
-            msg.innerHTML = '<div class="err">এই নম্বর আগেই রেজিস্টার করা হয়েছে।<br>পাসওয়ার্ড: <strong>' + password + '</strong></div>';
+        } else if (res && res.message) {
+            // Server-provided message (e.g. already registered, invalid number)
+            msg.innerHTML = '<div class="err">' + res.message + '</div>';
         } else {
-            msg.innerHTML = '<div class="err">রেজিস্ট্রেশনের জন্য কল করুন:<br><strong>০১৯৭৫ ৫৮ ৫৯ ৬০</strong></div>';
+            msg.innerHTML = callMsg;
         }
     };
 
     xhr.onerror = function() {
-        btn.disabled = false;
-        btn.textContent = 'রেজিস্টার করুন';
-        msg.innerHTML = '<div class="err">রেজিস্ট্রেশনের জন্য কল করুন:<br><strong>০১৯৭৫ ৫৮ ৫৯ ৬০</strong></div>';
+        resetBtn();
+        msg.innerHTML = callMsg;
     };
 
     xhr.ontimeout = function() {
-        btn.disabled = false;
-        btn.textContent = 'রেজিস্টার করুন';
-        msg.innerHTML = '<div class="err">রেজিস্ট্রেশনের জন্য কল করুন:<br><strong>০১৯৭৫ ৫৮ ৫৯ ৬০</strong></div>';
+        resetBtn();
+        msg.innerHTML = callMsg;
     };
 
-    xhr.send(JSON.stringify({
-        name: phone,
-        password: password,
-        profile: 'default',
-        comment: name
-    }));
+    xhr.send('phone=' + encodeURIComponent(phone) + '&name=' + encodeURIComponent(name));
 };
 </script>
 </body>

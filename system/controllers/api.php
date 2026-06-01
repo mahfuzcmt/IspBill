@@ -88,7 +88,10 @@ function hotspot_register() {
             ->find_one();
 
         if ($router) {
-            $client = Mikrotik::getClient($router['ip_address'], $router['username'], $router['password']);
+            // tryClient() returns null on failure instead of die()-ing, so a
+            // momentarily unreachable router never aborts the JSON response or
+            // rolls back the customer we just created in the database.
+            $client = Mikrotik::tryClient($router['ip_address'], $router['username'], $router['password']);
 
             if ($client) {
                 // Check if hotspot user already exists

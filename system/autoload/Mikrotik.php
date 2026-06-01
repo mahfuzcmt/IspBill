@@ -257,6 +257,40 @@ class Mikrotik
         $client->sendSync($setRequest);
     }
 
+    /**
+     * Return the set of hotspot usernames that have actually been used
+     * (logged in at least once). A freshly created voucher user has zero
+     * uptime and zero bytes transferred; the moment a customer redeems it at
+     * the captive portal those counters become non-zero. Used to reconcile
+     * voucher status back into the billing database, since portal redemptions
+     * are consumed on the router directly and never touch the billing flow.
+     *
+     * @return array Map of username => true for every used hotspot user.
+     */
+    public static function getUsedHotspotUsers($client)
+    {
+        $used = [];
+        $req = new RouterOS\Request('/ip/hotspot/user/print');
+        $req->setArgument('.proplist', 'name,uptime,bytes-in,bytes-out');
+        foreach ($client->sendSync($req) as $r) {
+            if ($r->getType() !== RouterOS\Response::TYPE_DATA) {
+                continue;
+            }
+            $name = $r->getProperty('name');
+            if ($name === null || $name === '') {
+                continue;
+            }
+            $uptime   = (string) $r->getProperty('uptime');
+            $bytesIn  = (int) $r->getProperty('bytes-in');
+            $bytesOut = (int) $r->getProperty('bytes-out');
+            $usedUptime = ($uptime !== '' && $uptime !== '0s' && $uptime !== '00:00:00');
+            if ($usedUptime || $bytesIn > 0 || $bytesOut > 0) {
+                $used[$name] = true;
+            }
+        }
+        return $used;
+    }
+
     public static function removeHotspotActiveUser($client, $username)
     {
         $onlineRequest = new RouterOS\Request('/ip/hotspot/active/print');

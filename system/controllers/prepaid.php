@@ -22,6 +22,64 @@ use PEAR2\Net\RouterOS;
 
 require_once 'system/autoload/PEAR2/Autoload.php';
 
+/**
+ * Reconcile Hotspot voucher status from Mikrotik.
+ *
+ * Vouchers redeemed at the captive portal are consumed on the router directly
+ * and never pass through the billing flow, so tbl_voucher.status can stay '0'
+ * ("Not Use") even though the code is spent. This reads each router's hotspot
+ * user counters (uptime / bytes) and marks spent vouchers as used so they show
+ * correctly in the list AND drop out of the print list.
+ */
+if (!function_exists('prepaid_sync_voucher_status')) {
+    function prepaid_sync_voucher_status($config)
+    {
+        if (!empty($config['radius_mode'])) {
+            return;
+        }
+        $pending = ORM::for_table('tbl_voucher')
+            ->where('type', 'Hotspot')
+            ->where('status', '0')
+            ->find_many();
+        if (!$pending) {
+            return;
+        }
+        // Group pending vouchers by router selector so each router is queried
+        // only once.
+        $byRouter = [];
+        foreach ($pending as $vch) {
+            $byRouter[(string) $vch->routers][(string) $vch->code] = $vch;
+        }
+        foreach ($byRouter as $selector => $codeMap) {
+            $mt = Mikrotik::info($selector);
+            if (!$mt || empty($mt['ip_address'])) {
+                continue;
+            }
+            $client = Mikrotik::tryClient($mt['ip_address'], $mt['username'], $mt['password']);
+            if (!$client) {
+                continue;
+            }
+            try {
+                $usedNames = Mikrotik::getUsedHotspotUsers($client);
+            } catch (Throwable $e) {
+                continue;
+            }
+            foreach ($codeMap as $code => $vch) {
+                if (isset($usedNames[$code])) {
+                    $vch->status = '1';
+                    // Portal redemptions log in with the code as the username,
+                    // so stamp the code into the user column (shown under
+                    // "Customers") unless already set.
+                    if ($vch->user === null || $vch->user === '' || $vch->user === '0') {
+                        $vch->user = $code;
+                    }
+                    $vch->save();
+                }
+            }
+        }
+    }
+}
+
 switch ($action) {
     case 'list':
         $ui->assign('xfooter', '<script type="text/javascript" src="ui/lib/c/prepaid.js"></script>');
@@ -405,6 +463,10 @@ switch ($action) {
         break;
 
     case 'voucher':
+        // Reconcile voucher usage from Mikrotik before listing, so captive-portal
+        // redemptions (consumed on the router directly) show as Used.
+        prepaid_sync_voucher_status($config);
+
         $ui->assign('xfooter', '<script type="text/javascript" src="ui/lib/c/voucher.js"></script>');
 
         $code = _post('code');
@@ -445,6 +507,11 @@ switch ($action) {
         break;
 
     case 'print-voucher':
+        // Reconcile usage from Mikrotik first so vouchers already redeemed at
+        // the captive portal are marked Used and excluded from the print list
+        // by the status='0' filters below.
+        prepaid_sync_voucher_status($config);
+
         $from_id = intval(_post('from_id'));
         $planid = intval(_post('planid'));
         $pagebreak = intval(_post('pagebreak'));
