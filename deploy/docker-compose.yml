@@ -1,0 +1,179 @@
+services:
+  nuxbill-db:
+    image: mariadb:10.11
+    container_name: phpnuxbill-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: phpnuxbill
+      MARIADB_USER: phpnuxbill
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./db-data:/var/lib/mysql
+    networks:
+      - nuxbill-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nuxbill-app:
+    image: animegasan/phpnuxbill:latest
+    container_name: phpnuxbill-app
+    restart: unless-stopped
+    depends_on:
+      nuxbill-db:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    volumes:
+      - ./app-data:/var/www/html/system/uploads
+      - ./overrides/ui/ui/wan.tpl:/var/www/html/ui/ui/wan.tpl:ro
+      - ./overrides/system/controllers/wan.php:/var/www/html/system/controllers/wan.php:ro
+      - ./overrides/ui/ui/customers-diagnose.tpl:/var/www/html/ui/ui/customers-diagnose.tpl:ro
+      - ./overrides/index.php:/var/www/html/index.php:ro
+      - ./overrides/system/cron.php:/var/www/html/system/cron.php:ro
+      - ./overrides/ui/ui/expired-notice.tpl:/var/www/html/ui/ui/expired-notice.tpl:ro
+      - ./overrides/system/controllers/notice.php:/var/www/html/system/controllers/notice.php:ro
+      - ./overrides/ui/ui/sms-settings.tpl:/var/www/html/ui/ui/sms-settings.tpl:ro
+      - ./overrides/system/controllers/sms.php:/var/www/html/system/controllers/sms.php:ro
+      - ./overrides/system/autoload/SmsSender.php:/var/www/html/system/autoload/SmsSender.php:ro
+      - ./overrides/ui/ui/admin-login.tpl:/var/www/html/ui/ui/admin-login.tpl:ro
+      - ./overrides/ui/ui/community.tpl:/var/www/html/ui/ui/community.tpl:ro
+      - ./overrides/system/lan/english/common.lan.php:/var/www/html/system/lan/english/common.lan.php:ro
+      - ./overrides/ui/ui/sections/user-footer.tpl:/var/www/html/ui/ui/sections/user-footer.tpl:ro
+      - ./overrides/ui/ui/sections/footer.tpl:/var/www/html/ui/ui/sections/footer.tpl:ro
+      - ./overrides/config.php:/var/www/html/config.php:ro
+      - ./overrides/system/controllers/customers.php:/var/www/html/system/controllers/customers.php:ro
+      - ./overrides/system/controllers/prepaid.php:/var/www/html/system/controllers/prepaid.php:ro
+      - ./overrides/system/controllers/api.php:/var/www/html/system/controllers/api.php:ro
+      - ./overrides/ui/ui/recharge.tpl:/var/www/html/ui/ui/recharge.tpl:ro
+      - ./overrides/ui/ui/recharge-user.tpl:/var/www/html/ui/ui/recharge-user.tpl:ro
+      - ./overrides/ui/ui/customers.tpl:/var/www/html/ui/ui/customers.tpl:ro
+      - ./overrides/system/autoload/Mikrotik.php:/var/www/html/system/autoload/Mikrotik.php:ro
+      - ./overrides/system/boot.php:/var/www/html/system/boot.php:ro
+      - ./overrides/system/controllers/routers.php:/var/www/html/system/controllers/routers.php:ro
+      - ./overrides/system/controllers/services.php:/var/www/html/system/controllers/services.php:ro
+      - ./overrides/ui/ui/routers.tpl:/var/www/html/ui/ui/routers.tpl:ro
+      - ./overrides/ui/ui/routers-add.tpl:/var/www/html/ui/ui/routers-add.tpl:ro
+      - ./overrides/ui/ui/routers-edit.tpl:/var/www/html/ui/ui/routers-edit.tpl:ro
+      - ./overrides/ui/ui/routers-console.tpl:/var/www/html/ui/ui/routers-console.tpl:ro
+      - ./overrides/system/controllers/autoload.php:/var/www/html/system/controllers/autoload.php:ro
+      - ./overrides/system/controllers/pool.php:/var/www/html/system/controllers/pool.php:ro
+      - ./overrides/ui/ui/autoload-server.tpl:/var/www/html/ui/ui/autoload-server.tpl:ro
+      - ./overrides/ui/ui/hotspot-add.tpl:/var/www/html/ui/ui/hotspot-add.tpl:ro
+      - ./overrides/ui/ui/pppoe-add.tpl:/var/www/html/ui/ui/pppoe-add.tpl:ro
+      - ./overrides/ui/ui/pool-add.tpl:/var/www/html/ui/ui/pool-add.tpl:ro
+      - ./overrides/system/controllers/dashboard.php:/var/www/html/system/controllers/dashboard.php:ro
+      - ./overrides/ui/ui/dashboard.tpl:/var/www/html/ui/ui/dashboard.tpl:ro
+      - ./overrides/ui/ui/customers-credits.tpl:/var/www/html/ui/ui/customers-credits.tpl:ro
+      - ./overrides/ui/ui/customers-billing.tpl:/var/www/html/ui/ui/customers-billing.tpl:ro
+      - ./overrides/ui/ui/customers-add.tpl:/var/www/html/ui/ui/customers-add.tpl:ro
+      - ./overrides/ui/ui/customers-edit.tpl:/var/www/html/ui/ui/customers-edit.tpl:ro
+      - ./overrides/ui/ui/customers-live-traffic.tpl:/var/www/html/ui/ui/customers-live-traffic.tpl:ro
+      - ./overrides/ui/ui/scripts/vendor:/var/www/html/ui/ui/scripts/vendor:ro
+      - ./overrides/ui/ui/customers-graph.tpl:/var/www/html/ui/ui/customers-graph.tpl:ro
+      - ./overrides/system/traffic-poller.php:/var/www/html/system/traffic-poller.php:ro
+      - ./overrides/system/controllers/olt.php:/var/www/html/system/controllers/olt.php:ro
+      - ./overrides/system/olt-poller.php:/var/www/html/system/olt-poller.php:ro
+      - ./overrides/ui/ui/olt.tpl:/var/www/html/ui/ui/olt.tpl:ro
+      - ./overrides/ui/ui/olt-add.tpl:/var/www/html/ui/ui/olt-add.tpl:ro
+      - ./overrides/ui/ui/olt-edit.tpl:/var/www/html/ui/ui/olt-edit.tpl:ro
+      - ./overrides/ui/ui/olt-onus.tpl:/var/www/html/ui/ui/olt-onus.tpl:ro
+      - ./overrides/ui/ui/sections/header.tpl:/var/www/html/ui/ui/sections/header.tpl:ro
+      - ./overrides/system/controllers/accounts.php:/var/www/html/system/controllers/accounts.php:ro
+      - ./overrides/system/controllers/voucher.php:/var/www/html/system/controllers/voucher.php:ro
+      - ./overrides/system/autoload/Package.php:/var/www/html/system/autoload/Package.php:ro
+      # Customer DNS browsing-history admin tab (added with dns-logging patch)
+      - ./overrides/ui/ui/customers-browsing.tpl:/var/www/html/ui/ui/customers-browsing.tpl:ro
+      - ./overrides/ui/ui/print-voucher.tpl:/var/www/html/ui/ui/print-voucher.tpl:ro
+      - ./dnsmasq-resolver/logs:/var/log/dnsmasq:ro
+      # Due warning system for PPPoE users with outstanding balance
+      - ./overrides/system/controllers/due-notice.php:/var/www/html/system/controllers/due-notice.php:ro
+      - ./overrides/system/due-sync.php:/var/www/html/system/due-sync.php:ro
+      - ./overrides/system/cleanup-pppoe.php:/var/www/html/system/cleanup-pppoe.php:ro
+    networks:
+      - nuxbill-net
+
+
+
+  # Runs traffic-poller.php every 60s. Reuses the upstream app image because
+  # the override file mounts already supply the customised poller and config.
+  nuxbill-cron:
+    image: animegasan/phpnuxbill:latest
+    container_name: phpnuxbill-cron
+    restart: unless-stopped
+    depends_on:
+      nuxbill-db:
+        condition: service_healthy
+    command: >
+      sh -c "while true; do
+        php /var/www/html/system/traffic-poller.php || echo poller-exit=$$?;
+        sleep 60;
+      done"
+    volumes:
+      - ./app-data:/var/www/html/system/uploads
+      - ./overrides/system/traffic-poller.php:/var/www/html/system/traffic-poller.php:ro
+      - ./overrides/system/autoload/Mikrotik.php:/var/www/html/system/autoload/Mikrotik.php:ro
+      - ./overrides/config.php:/var/www/html/config.php:ro
+    networks:
+      - nuxbill-net
+
+  router-proxy:
+    image: nginx:1.27-alpine
+    container_name: router-proxy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./router-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./router-proxy/htpasswd:/etc/nginx/htpasswd:ro
+
+  # NetPulse DNS-logging recursive resolver (port 5454).
+  # Writes per-query logs to dnsmasq-resolver/logs/queries.log; the file
+  # is bind-mounted read-only into phpnuxbill-app for the Browsing History
+  # admin tab, and rotated by host-side logrotate (7-day retention).
+  dnsmasq-resolver:
+    build:
+      context: ./dnsmasq-resolver
+      dockerfile: Dockerfile
+    container_name: dnsmasq-resolver
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_BIND_SERVICE
+    volumes:
+      - ./dnsmasq-resolver/dnsmasq.conf:/etc/dnsmasq.conf:ro
+      - ./dnsmasq-resolver/logs:/var/log/dnsmasq:rw
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+        tag: "dnsmasq-resolver"
+    healthcheck:
+      test: ["CMD-SHELL", "nslookup -port=5454 example.com 10.99.0.1 | grep -q Address"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  dnsmasq:
+    build:
+      context: ./dnsmasq
+      dockerfile: Dockerfile
+    container_name: dnsmasq
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_BIND_SERVICE
+    volumes:
+      - ./dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nslookup example.com 10.99.0.1 | grep -q Address"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  nuxbill-net:
+    driver: bridge
