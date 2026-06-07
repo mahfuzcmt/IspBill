@@ -940,19 +940,29 @@ switch ($action) {
                         }
                     } catch (Throwable $e) { /* user has no dynamic queue (offline) */ }
 
-                    // Get real-time rate from interface monitor (matches Winbox)
-                    try {
-                        $req = new RouterOS\Request('/interface/monitor-traffic');
-                        $req->setArgument('interface', '<pppoe-' . $username . '>');
-                        $req->setArgument('once', '');
-                        foreach ($client->sendSync($req) as $r) {
-                            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                            if (!$out['live']) $out['live'] = ['ts' => time() * 1000, 'bytesIn'=>0,'bytesOut'=>0];
-                            // rx = upload from user, tx = download to user
-                            $out['live']['rateIn']  = (int) ($r->getProperty('rx-bits-per-second') ?? 0);
-                            $out['live']['rateOut'] = (int) ($r->getProperty('tx-bits-per-second') ?? 0);
-                        }
-                    } catch (Throwable $e) { /* interface monitor failed */ }
+                    // Derive current rate from the byte delta vs the most recent
+                    // stored sample. /interface/monitor-traffic reads 0 for normal
+                    // traffic on this RouterOS, so it cannot drive the rate. Live
+                    // bytes here come from the queue (cumulative), matching the
+                    // stored samples, so the delta is valid.
+                    if ($out['live']) {
+                        try {
+                            $prev = ORM::for_table('tbl_traffic_samples')->raw_query(
+                                "SELECT bytes_in, bytes_out, UNIX_TIMESTAMP(ts) AS t
+                                 FROM tbl_traffic_samples WHERE username = ?
+                                 ORDER BY id DESC LIMIT 1", [$username]
+                            )->find_one();
+                            if ($prev) {
+                                $dt = time() - (int) $prev['t'];
+                                if ($dt > 0) {
+                                    $dIn  = (int) $out['live']['bytesIn']  - (int) $prev['bytes_in'];
+                                    $dOut = (int) $out['live']['bytesOut'] - (int) $prev['bytes_out'];
+                                    if ($dIn  > 0) $out['live']['rateIn']  = (int) ($dIn  * 8 / $dt);
+                                    if ($dOut > 0) $out['live']['rateOut'] = (int) ($dOut * 8 / $dt);
+                                }
+                            }
+                        } catch (Throwable $e) { /* no prior sample to delta against */ }
+                    }
 
                     try {
                         $req = new RouterOS\Request('/ppp/active/print');

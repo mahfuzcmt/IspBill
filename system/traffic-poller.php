@@ -60,28 +60,30 @@ try {
     } catch (Throwable $e) { $errors[] = 'queue: ' . $e->getMessage(); }
 
     // -----------------------------------------------------------------
-    // 1b. Per-customer rates from /interface/monitor-traffic (accurate,
-    //     matches Winbox live display)
+    // 1b. Per-customer rate from cumulative-byte deltas vs the previous
+    //     sample. /interface/monitor-traffic only captures a single instant
+    //     and reads ~0 for normal browsing (it returned 0 for every user on
+    //     this RouterOS), leaving the historical rate graph a flat zero line.
+    //     The per-minute byte delta is the true average throughput.
     // -----------------------------------------------------------------
-    if (!empty($pppoeInterfaces)) {
-        try {
-            $req = new RouterOS\Request('/interface/monitor-traffic');
-            $req->setArgument('interface', implode(',', $pppoeInterfaces));
-            $req->setArgument('once', '');
-            foreach ($client->sendSync($req) as $r) {
-                if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                $ifName = $r->getProperty('name');
-                if (preg_match('/^<pppoe-(.+)>$/', $ifName, $m)) {
-                    $user = $m[1];
-                    if (isset($dataByUser[$user])) {
-                        // Interface rx = traffic INTO router = customer upload
-                        // Interface tx = traffic OUT of router = customer download
-                        $dataByUser[$user]['rate_in']  = (int) ($r->getProperty('rx-bits-per-second') ?? 0);
-                        $dataByUser[$user]['rate_out'] = (int) ($r->getProperty('tx-bits-per-second') ?? 0);
-                    }
+    if ($dataByUser) {
+        $prevStmt = $pdo->prepare(
+            "SELECT bytes_in, bytes_out, UNIX_TIMESTAMP(ts) AS t
+             FROM tbl_traffic_samples WHERE username = ? ORDER BY id DESC LIMIT 1"
+        );
+        foreach ($dataByUser as $user => $s) {
+            $prevStmt->execute([$user]);
+            if ($prev = $prevStmt->fetch(PDO::FETCH_ASSOC)) {
+                $dt = $start - (int) $prev['t'];
+                if ($dt > 0) {
+                    // bytes_in = upload (from customer), bytes_out = download
+                    $dIn  = $s['bytes_in']  - (int) $prev['bytes_in'];
+                    $dOut = $s['bytes_out'] - (int) $prev['bytes_out'];
+                    if ($dIn  > 0) $dataByUser[$user]['rate_in']  = (int) ($dIn  * 8 / $dt);
+                    if ($dOut > 0) $dataByUser[$user]['rate_out'] = (int) ($dOut * 8 / $dt);
                 }
             }
-        } catch (Throwable $e) { $errors[] = 'iface-monitor: ' . $e->getMessage(); }
+        }
     }
     $rateByUser = $dataByUser;
 
