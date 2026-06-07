@@ -110,11 +110,13 @@ services:
     command: >
       sh -c "while true; do
         php /var/www/html/system/traffic-poller.php || echo poller-exit=$$?;
+        php /var/www/html/system/hotspot-voucher-expiry.php || echo voucher-exit=$$?;
         sleep 60;
       done"
     volumes:
       - ./app-data:/var/www/html/system/uploads
       - ./overrides/system/traffic-poller.php:/var/www/html/system/traffic-poller.php:ro
+      - ./overrides/system/hotspot-voucher-expiry.php:/var/www/html/system/hotspot-voucher-expiry.php:ro
       - ./overrides/system/autoload/Mikrotik.php:/var/www/html/system/autoload/Mikrotik.php:ro
       - ./overrides/config.php:/var/www/html/config.php:ro
     networks:

@@ -106,6 +106,60 @@ try {
         }
     } catch (Throwable $e) { $errors[] = 'iface: ' . $e->getMessage(); }
 
+    // -----------------------------------------------------------------
+    // 2b. Hotspot sessions. PPPoE queues/interfaces don't exist for
+    //     hotspot users, so they get no samples from the steps above and
+    //     their per-customer graph stays empty. Sample currently-connected
+    //     hotspot users here: cumulative bytes from /ip/hotspot/user, rate
+    //     derived from the delta vs the user's previous sample (there is no
+    //     per-user interface to monitor-traffic for hotspot).
+    // -----------------------------------------------------------------
+    try {
+        $activeHs = [];
+        $req = new RouterOS\Request('/ip/hotspot/active/print');
+        $req->setArgument('.proplist', 'user');
+        foreach ($client->sendSync($req) as $r) {
+            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+            $u = $r->getProperty('user');
+            if ($u !== null && $u !== '') $activeHs[$u] = true;
+        }
+
+        if ($activeHs) {
+            $prevStmt = $pdo->prepare(
+                "SELECT bytes_in, bytes_out, UNIX_TIMESTAMP(ts) AS t
+                 FROM tbl_traffic_samples WHERE username = ? ORDER BY id DESC LIMIT 1"
+            );
+            $req = new RouterOS\Request('/ip/hotspot/user/print');
+            $req->setArgument('.proplist', 'name,bytes-in,bytes-out');
+            foreach ($client->sendSync($req) as $r) {
+                if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                $name = $r->getProperty('name');
+                if ($name === null || !isset($activeHs[$name])) continue;
+                $bin  = (int) $r->getProperty('bytes-in');   // from client = upload
+                $bout = (int) $r->getProperty('bytes-out');  // to client   = download
+                $rateIn = 0; $rateOut = 0;
+                $prevStmt->execute([$name]);
+                if ($prev = $prevStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $dt = $start - (int) $prev['t'];
+                    if ($dt > 0) {
+                        $dIn  = $bin  - (int) $prev['bytes_in'];
+                        $dOut = $bout - (int) $prev['bytes_out'];
+                        if ($dIn  > 0) $rateIn  = (int) ($dIn  * 8 / $dt);
+                        if ($dOut > 0) $rateOut = (int) ($dOut * 8 / $dt);
+                    }
+                }
+                // Keyed by username — same shape as the PPPoE samples so the
+                // persist loop below writes them with no special-casing.
+                $rateByUser[$name] = [
+                    'rate_in'   => $rateIn,
+                    'rate_out'  => $rateOut,
+                    'bytes_in'  => $bin,
+                    'bytes_out' => $bout,
+                ];
+            }
+        }
+    } catch (Throwable $e) { $errors[] = 'hotspot: ' . $e->getMessage(); }
+
     // Persist per-user samples
     if ($rateByUser) {
         $stmt = $pdo->prepare(

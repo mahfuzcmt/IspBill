@@ -860,11 +860,35 @@ switch ($action) {
                 ];
             }
 
+            // Determine service type so the live snapshot queries the right
+            // source (hotspot users have no <pppoe-USER> interface/queue).
+            $rtype = ORM::for_table('tbl_user_recharges')
+                        ->where('username', $username)->order_by_desc('id')->find_one();
+            $isHotspot = $rtype && $rtype['type'] === 'Hotspot';
+
             // Live snapshot from Mikrotik using interface/monitor-traffic for accurate rates.
             $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
             if ($rt) {
                 $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
                 if ($client) try {
+                    if ($isHotspot) {
+                        // Hotspot: no per-user interface/queue — read the live session.
+                        $req = new RouterOS\Request('/ip/hotspot/active/print');
+                        $req->setQuery(RouterOS\Query::where('user', $username));
+                        $req->setArgument('.proplist', 'user,address,uptime,bytes-in,bytes-out');
+                        foreach ($client->sendSync($req) as $r) {
+                            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                            $out['live'] = [
+                                'ts'       => time() * 1000,
+                                'rateIn'   => 0,
+                                'rateOut'  => 0,
+                                'bytesIn'  => (int) $r->getProperty('bytes-in'),
+                                'bytesOut' => (int) $r->getProperty('bytes-out'),
+                                'address'  => $r->getProperty('address'),
+                                'uptime'   => $r->getProperty('uptime'),
+                            ];
+                        }
+                    } else {
                     // Get cumulative bytes from queue
                     try {
                         $req = new RouterOS\Request('/queue/simple/print');
@@ -909,6 +933,7 @@ switch ($action) {
                             $out['live']['callerId'] = $r->getProperty('caller-id');
                         }
                     } catch (Throwable $e) { /* user not currently connected */ }
+                    } // end else (PPPoE live snapshot)
                 } catch (Throwable $e) {
                     // Router unreachable — keep DB history, just no live snapshot.
                 }

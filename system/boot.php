@@ -239,6 +239,35 @@ if (empty($config['schema_router_webfig_url_v1'])) {
     $config['schema_router_webfig_url_v1'] = '1';
 }
 
+// Hotspot voucher validity enforcement: track first redemption + computed expiry
+// so a voucher used directly at the captive portal can be expired after its plan
+// validity (see system/hotspot-voucher-expiry.php).
+if (empty($config['schema_voucher_expiry_v1'])) {
+    $db = ORM::get_db();
+    $cols = $db->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_voucher'
+           AND COLUMN_NAME IN ('first_used_at','expiry')"
+    )->fetchAll(PDO::FETCH_COLUMN);
+    $needed = [
+        'first_used_at' => "ADD COLUMN `first_used_at` DATETIME NULL DEFAULT NULL AFTER `status`",
+        'expiry'        => "ADD COLUMN `expiry` DATETIME NULL DEFAULT NULL AFTER `first_used_at`",
+    ];
+    foreach ($needed as $col => $alter) {
+        if (!in_array($col, $cols, true)) {
+            $db->exec("ALTER TABLE `tbl_voucher` $alter");
+        }
+    }
+    $flag = ORM::for_table('tbl_appconfig')->where('setting','schema_voucher_expiry_v1')->find_one();
+    if (!$flag) {
+        $flag = ORM::for_table('tbl_appconfig')->create();
+        $flag->setting = 'schema_voucher_expiry_v1';
+    }
+    $flag->value = '1';
+    $flag->save();
+    $config['schema_voucher_expiry_v1'] = '1';
+}
+
 date_default_timezone_set($config['timezone']);
 $_c = $config;
 
