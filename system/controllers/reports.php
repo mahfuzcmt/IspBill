@@ -38,6 +38,28 @@ switch ($action) {
         $ui->display('reports-daily.tpl');
         break;
 
+    case 'trial-users':
+        // Free-trial usage: grouped per mobile number (times used + total
+        // bandwidth + total minutes), plus the recent individual sessions.
+        $grouped = ORM::for_table('tbl_hotspot_trials')->raw_query(
+            "SELECT phone,
+                    SUBSTRING_INDEX(GROUP_CONCAT(name ORDER BY id DESC SEPARATOR '||'),'||',1) AS name,
+                    COUNT(*) AS times,
+                    SUM(bytes_in + bytes_out) AS total_bytes,
+                    SUM(TIMESTAMPDIFF(MINUTE, started_at, COALESCE(ended_at, NOW()))) AS total_minutes,
+                    MAX(started_at) AS last_used
+             FROM tbl_hotspot_trials
+             GROUP BY phone
+             ORDER BY last_used DESC", []
+        )->find_many();
+        $sessions = ORM::for_table('tbl_hotspot_trials')
+            ->order_by_desc('id')->limit(200)->find_many();
+        $ui->assign('grouped', $grouped);
+        $ui->assign('sessions', $sessions);
+        run_hook('view_trial_users'); #HOOK
+        $ui->display('reports-trial.tpl');
+        break;
+
     case 'by-period':
 		$ui->assign('mdate',$mdate);
 		$ui->assign('mtime',$mtime);

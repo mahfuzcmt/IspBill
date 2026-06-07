@@ -157,6 +157,8 @@
                                         href="{$_url}reports/daily-report">{$_L['Daily_Report']}</a></li>
                                 <li {if $_routes[1] eq 'by-period'}class="active" {/if}><a
                                         href="{$_url}reports/by-period">{$_L['Period_Reports']}</a></li>
+                                <li {if $_routes[1] eq 'trial-users'}class="active" {/if}><a
+                                        href="{$_url}reports/trial-users">Trial Users</a></li>
                                 {$_MENU_REPORTS}
                             </ul>
                         </li>

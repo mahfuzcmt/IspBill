@@ -1,7 +1,10 @@
 <?php
 /**
- * Hotspot voucher expiry sweep — runs every minute from the cron container,
- * alongside traffic-poller.php.
+ * Hotspot maintenance sweep — runs every minute from the cron container,
+ * alongside traffic-poller.php. Handles two things:
+ *   (a) Voucher expiry (below).
+ *   (b) Free-trial session tracking: fills per-session bytes + end time for
+ *       trial rows recorded by api/hotspot-trial (matched by MAC).
  *
  * Why this exists
  * ---------------
@@ -45,6 +48,7 @@ $now    = date('Y-m-d H:i:s');
 $nowTs  = time();
 $start  = microtime(true);
 $stamped = 0; $expired = 0; $errors = [];
+$trialsUpdated = 0; $trialsClosed = 0;
 
 if (!empty($cfg['radius_mode'])) {
     echo date('c') . " skip (radius_mode)\n";
@@ -82,10 +86,8 @@ try {
     foreach ($pdo->query($sql) as $row) {
         $vouchers[$row['code']] = $row;
     }
-    if (!$vouchers) {
-        echo date('c') . " ok no manageable hotspot vouchers\n";
-        exit(0);
-    }
+    // Note: we continue even with no vouchers — trial-session tracking below
+    // still needs to run. The voucher loop simply does nothing when empty.
 
     // Router hotspot users: name -> [.id, uptime]
     $usersOnRouter = [];
@@ -154,8 +156,55 @@ try {
         }
     }
 
+    // -----------------------------------------------------------------
+    // Hotspot free-trial session tracking. Fill per-session bytes + end time
+    // for trial rows recorded by api/hotspot-trial. The per-MAC active entry
+    // carries that session's own counters (the shared 'default-trial' user only
+    // holds aggregate totals), so we match active trial sessions to open rows by
+    // MAC. login-by='trial' marks a genuine trial login.
+    // -----------------------------------------------------------------
+    try {
+        $trialActive = [];
+        $req = new RouterOS\Request('/ip/hotspot/active/print');
+        $req->setArgument('.proplist', 'mac-address,address,login-by,bytes-in,bytes-out');
+        foreach ($client->sendSync($req) as $r) {
+            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+            if (strpos((string) $r->getProperty('login-by'), 'trial') === false) continue;
+            $mac = strtoupper((string) $r->getProperty('mac-address'));
+            if ($mac === '') continue;
+            $trialActive[$mac] = [
+                'in'  => (int) $r->getProperty('bytes-in'),
+                'out' => (int) $r->getProperty('bytes-out'),
+                'ip'  => $r->getProperty('address'),
+            ];
+        }
+
+        $openTrials = $pdo->query(
+            "SELECT id, mac, ip, UNIX_TIMESTAMP(started_at) AS started_ts
+             FROM tbl_hotspot_trials WHERE ended_at IS NULL"
+        )->fetchAll(PDO::FETCH_ASSOC);
+        $updT   = $pdo->prepare("UPDATE tbl_hotspot_trials SET bytes_in=:bi, bytes_out=:bo, ip=COALESCE(:ip, ip) WHERE id=:id");
+        $closeT = $pdo->prepare("UPDATE tbl_hotspot_trials SET ended_at=:ea WHERE id=:id");
+        $graceTs = $nowTs - 300; // 5-minute grace for the session to appear
+
+        foreach ($openTrials as $row) {
+            $mac = strtoupper((string) $row['mac']);
+            if ($mac !== '' && isset($trialActive[$mac])) {
+                $a = $trialActive[$mac];
+                $updT->execute([':bi' => $a['in'], ':bo' => $a['out'], ':ip' => ($a['ip'] ?: $row['ip']), ':id' => $row['id']]);
+                $trialsUpdated++;
+            } elseif ((int) $row['started_ts'] < $graceTs) {
+                // No active trial session and past the grace window -> trial ended.
+                // Existing bytes (from the last active poll) are kept.
+                $closeT->execute([':ea' => $now, ':id' => $row['id']]);
+                $trialsClosed++;
+            }
+        }
+    } catch (Throwable $e) { $errors[] = 'trial: ' . $e->getMessage(); }
+
     $ms = (int) ((microtime(true) - $start) * 1000);
     echo date('c') . " ok stamped=$stamped expired=$expired vouchers=" . count($vouchers)
+       . " trial_upd=$trialsUpdated trial_closed=$trialsClosed"
        . (count($errors) ? " errs=" . implode(' | ', array_slice($errors, 0, 5)) : '')
        . " in {$ms}ms\n";
 } catch (Throwable $e) {

@@ -48,6 +48,8 @@ services:
       - ./overrides/system/controllers/customers.php:/var/www/html/system/controllers/customers.php:ro
       - ./overrides/system/controllers/prepaid.php:/var/www/html/system/controllers/prepaid.php:ro
       - ./overrides/system/controllers/api.php:/var/www/html/system/controllers/api.php:ro
+      - ./overrides/system/controllers/reports.php:/var/www/html/system/controllers/reports.php:ro
+      - ./overrides/ui/ui/reports-trial.tpl:/var/www/html/ui/ui/reports-trial.tpl:ro
       - ./overrides/ui/ui/recharge.tpl:/var/www/html/ui/ui/recharge.tpl:ro
       - ./overrides/ui/ui/recharge-user.tpl:/var/www/html/ui/ui/recharge-user.tpl:ro
       - ./overrides/ui/ui/customers.tpl:/var/www/html/ui/ui/customers.tpl:ro

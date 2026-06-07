@@ -27,8 +27,79 @@ switch ($action) {
         hotspot_register();
         break;
 
+    case 'hotspot-trial':
+        hotspot_trial();
+        break;
+
     default:
         json_response(false, 'Invalid API endpoint');
+}
+
+/**
+ * Record a free-trial start (name + mobile) before the captive portal hands
+ * off to the Mikrotik native trial login. One row per trial session; repeated
+ * clicks within the same 1-hour trial window reuse the open row so the
+ * per-number "times used" count reflects real trial sessions, not button taps.
+ * Per-session bandwidth + end time are filled in later by the cron sweep
+ * (system/hotspot-voucher-expiry.php) which matches the active trial session
+ * to this row by MAC address.
+ */
+function hotspot_trial() {
+    $phone = trim($_POST['phone'] ?? '');
+    $name  = trim($_POST['name'] ?? '');
+    $mac   = strtoupper(trim($_POST['mac'] ?? ''));
+    $ip    = trim($_POST['ip'] ?? ($_SERVER['REMOTE_ADDR'] ?? ''));
+
+    if (!preg_match('/^01[3-9][0-9]{8}$/', $phone)) {
+        json_response(false, 'সঠিক মোবাইল নম্বর দিন');
+        return;
+    }
+    if (mb_strlen($name) < 3) {
+        json_response(false, 'আপনার নাম দিন');
+        return;
+    }
+    // Normalise MAC (accept AA:BB:.. or AA-BB-..); blank if not a valid MAC.
+    $mac = str_replace('-', ':', $mac);
+    if (!preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/', $mac)) {
+        $mac = '';
+    }
+
+    try {
+        // Reuse the current open trial row for this MAC if it started within the
+        // 1-hour trial window — avoids double-counting rapid re-submits/relogins.
+        $open = null;
+        if ($mac !== '') {
+            $open = ORM::for_table('tbl_hotspot_trials')
+                ->where('mac', $mac)
+                ->where_null('ended_at')
+                ->where_gt('started_at', date('Y-m-d H:i:s', strtotime('-1 hour')))
+                ->order_by_desc('id')
+                ->find_one();
+        }
+
+        if (!$open) {
+            $t = ORM::for_table('tbl_hotspot_trials')->create();
+            $t->name       = $name;
+            $t->phone      = $phone;
+            $t->mac        = $mac ?: null;
+            $t->ip         = $ip ?: null;
+            $t->started_at = date('Y-m-d H:i:s');
+            $t->save();
+            _log("Hotspot Trial: {$phone} ({$name}) started trial, MAC {$mac}");
+        } else {
+            // Keep the latest name/phone in case they changed it.
+            $open->name  = $name;
+            $open->phone = $phone;
+            if ($ip) $open->ip = $ip;
+            $open->save();
+        }
+
+        json_response(true, 'ট্রায়াল শুরু হচ্ছে...');
+    } catch (Exception $e) {
+        _log("Hotspot Trial Error: " . $e->getMessage());
+        // Never block the trial on a logging failure — let the portal proceed.
+        json_response(true, 'ট্রায়াল শুরু হচ্ছে...');
+    }
 }
 
 /**

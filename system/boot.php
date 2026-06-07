@@ -268,6 +268,41 @@ if (empty($config['schema_voucher_expiry_v1'])) {
     $config['schema_voucher_expiry_v1'] = '1';
 }
 
+// Hotspot free-trial tracking: who started the 1-hour trial (name + mobile),
+// how many times, and per-session usage/time (see api/hotspot-trial +
+// system/hotspot-voucher-expiry.php).
+if (empty($config['schema_hotspot_trials_v1'])) {
+    $db = ORM::get_db();
+    $exists = $db->query(
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_hotspot_trials'"
+    )->fetchColumn();
+    if (!$exists) {
+        $db->exec("CREATE TABLE `tbl_hotspot_trials` (
+            `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `name` VARCHAR(128) DEFAULT NULL,
+            `phone` VARCHAR(20) NOT NULL,
+            `mac` VARCHAR(17) DEFAULT NULL,
+            `ip` VARCHAR(45) DEFAULT NULL,
+            `started_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `ended_at` DATETIME NULL DEFAULT NULL,
+            `bytes_in` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            `bytes_out` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            INDEX `idx_phone` (`phone`),
+            INDEX `idx_mac_ended` (`mac`, `ended_at`),
+            INDEX `idx_started` (`started_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    $flag = ORM::for_table('tbl_appconfig')->where('setting','schema_hotspot_trials_v1')->find_one();
+    if (!$flag) {
+        $flag = ORM::for_table('tbl_appconfig')->create();
+        $flag->setting = 'schema_hotspot_trials_v1';
+    }
+    $flag->value = '1';
+    $flag->save();
+    $config['schema_hotspot_trials_v1'] = '1';
+}
+
 date_default_timezone_set($config['timezone']);
 $_c = $config;
 
