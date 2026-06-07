@@ -33,6 +33,30 @@ switch ($action) {
         if (!in_array($serviceType, ['PPPoE', 'Hotspot', 'All'])) $serviceType = 'PPPoE';
         run_hook('list_customers'); #HOOK
 
+        // Hotspot customers may have self-registered and exist as a hotspot user
+        // on the router without ever buying a plan — so they have no
+        // tbl_user_recharges row, and a plain `r.type='Hotspot'` filter hides
+        // them (only customers with a Hotspot recharge would show). For the
+        // Hotspot view, also include customers with no recharge whose username
+        // is a live hotspot user on the router.
+        $hsNames = [];
+        if ($serviceType === 'Hotspot') {
+            try {
+                $rtH     = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+                $clientH = $rtH ? Mikrotik::tryClient($rtH['ip_address'], $rtH['username'], $rtH['password']) : null;
+                if ($clientH) {
+                    $reqH = new RouterOS\Request('/ip/hotspot/user/print');
+                    $reqH->setArgument('.proplist', 'name');
+                    foreach ($clientH->sendSync($reqH) as $rr) {
+                        if ($rr->getType() === RouterOS\Response::TYPE_DATA) {
+                            $nm = $rr->getProperty('name');
+                            if ($nm !== null && $nm !== '') $hsNames[] = $nm;
+                        }
+                    }
+                }
+            } catch (Throwable $e) { error_log('customers/list hotspot names: ' . $e->getMessage()); }
+        }
+
         // Build WHERE — both filters compose on top of the same JOINed view.
         $whereParts = [];
         $params     = [];
@@ -40,9 +64,17 @@ switch ($action) {
             $whereParts[] = 'c.username LIKE ?';
             $params[]     = '%' . $username . '%';
         }
-        if ($serviceType !== 'All') {
+        if ($serviceType === 'Hotspot') {
+            if (!empty($hsNames)) {
+                $ph = implode(',', array_fill(0, count($hsNames), '?'));
+                $whereParts[] = "(r.type = 'Hotspot' OR (r.id IS NULL AND c.username IN ($ph)))";
+                foreach ($hsNames as $n) $params[] = $n;
+            } else {
+                $whereParts[] = "r.type = 'Hotspot'";
+            }
+        } elseif ($serviceType === 'PPPoE') {
             $whereParts[] = 'r.type = ?';
-            $params[]     = $serviceType;
+            $params[]     = 'PPPoE';
         }
         $whereSql = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
 
