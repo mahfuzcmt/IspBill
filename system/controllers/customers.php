@@ -925,15 +925,19 @@ switch ($action) {
                     try {
                         $req = new RouterOS\Request('/queue/simple/print');
                         $req->setArgument('stats', 'yes');
-                        $req->setArgument('.proplist', 'name,bytes');
+                        $req->setArgument('.proplist', 'name,bytes,rate');
                         $req->setQuery(RouterOS\Query::where('name', '<pppoe-' . $username . '>'));
                         foreach ($client->sendSync($req) as $r) {
                             if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
                             $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
+                            // Instantaneous queue rate (bits/sec) — matches Winbox.
+                            // The byte-delta below is only a ~60s average; using the
+                            // queue rate makes "Current ↓/↑" reflect real speed.
+                            $rate  = explode('/', $r->getProperty('rate') ?: '0/0');
                             $out['live'] = [
                                 'ts'       => time() * 1000,
-                                'rateIn'   => 0,
-                                'rateOut'  => 0,
+                                'rateIn'   => (int) ($rate[0] ?? 0),
+                                'rateOut'  => (int) ($rate[1] ?? 0),
                                 'bytesIn'  => (int) ($bytes[0] ?? 0),
                                 'bytesOut' => (int) ($bytes[1] ?? 0),
                             ];
@@ -957,8 +961,10 @@ switch ($action) {
                                 if ($dt > 0) {
                                     $dIn  = (int) $out['live']['bytesIn']  - (int) $prev['bytes_in'];
                                     $dOut = (int) $out['live']['bytesOut'] - (int) $prev['bytes_out'];
-                                    if ($dIn  > 0) $out['live']['rateIn']  = (int) ($dIn  * 8 / $dt);
-                                    if ($dOut > 0) $out['live']['rateOut'] = (int) ($dOut * 8 / $dt);
+                                    // Prefer the higher of the instantaneous queue
+                                    // rate (set above) and the ~60s byte-delta average.
+                                    if ($dIn  > 0) $out['live']['rateIn']  = max((int) $out['live']['rateIn'],  (int) ($dIn  * 8 / $dt));
+                                    if ($dOut > 0) $out['live']['rateOut'] = max((int) $out['live']['rateOut'], (int) ($dOut * 8 / $dt));
                                 }
                             }
                         } catch (Throwable $e) { /* no prior sample to delta against */ }

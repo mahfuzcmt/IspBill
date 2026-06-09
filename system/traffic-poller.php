@@ -43,15 +43,20 @@ try {
     try {
         $req = new RouterOS\Request('/queue/simple/print');
         $req->setArgument('stats', 'yes');
-        $req->setArgument('.proplist', 'name,bytes');
+        $req->setArgument('.proplist', 'name,bytes,rate');
         foreach ($client->sendSync($req) as $r) {
             if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
             $qname = $r->getProperty('name');
             $user  = preg_match('/^<pppoe-(.+)>$/', $qname, $m) ? $m[1] : trim($qname, '<>');
             $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
+            // Instantaneous queue rate (bits/sec, upload/download) — this is what
+            // Winbox shows. The byte-delta below only yields the average over the
+            // whole minute, which flattens bursts; we keep whichever is higher so
+            // real peaks are visible on the graph instead of a near-flat line.
+            $rate  = explode('/', $r->getProperty('rate') ?: '0/0');
             $dataByUser[$user] = [
-                'rate_in'   => 0,  // Will be filled from interface/monitor-traffic
-                'rate_out'  => 0,
+                'rate_in'   => (int) ($rate[0] ?? 0),
+                'rate_out'  => (int) ($rate[1] ?? 0),
                 'bytes_in'  => (int) ($bytes[0] ?? 0),
                 'bytes_out' => (int) ($bytes[1] ?? 0),
             ];
@@ -79,8 +84,10 @@ try {
                     // bytes_in = upload (from customer), bytes_out = download
                     $dIn  = $s['bytes_in']  - (int) $prev['bytes_in'];
                     $dOut = $s['bytes_out'] - (int) $prev['bytes_out'];
-                    if ($dIn  > 0) $dataByUser[$user]['rate_in']  = (int) ($dIn  * 8 / $dt);
-                    if ($dOut > 0) $dataByUser[$user]['rate_out'] = (int) ($dOut * 8 / $dt);
+                    // Keep the instantaneous queue rate set above unless the
+                    // minute-average byte-delta is higher (sustained transfer).
+                    if ($dIn  > 0) $dataByUser[$user]['rate_in']  = max($dataByUser[$user]['rate_in'],  (int) ($dIn  * 8 / $dt));
+                    if ($dOut > 0) $dataByUser[$user]['rate_out'] = max($dataByUser[$user]['rate_out'], (int) ($dOut * 8 / $dt));
                 }
             }
         }
