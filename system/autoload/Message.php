@@ -21,6 +21,11 @@ class Message
     {
         global $config;
         run_hook('send_sms'); #HOOK
+        // Master SMS switch (Settings > Service Controls). Absent/'1' = enabled
+        // (default, preserves prior behaviour); any other value suppresses ALL SMS.
+        if (isset($config['sms_enabled']) && $config['sms_enabled'] !== '1') {
+            return;
+        }
         if (!empty($config['sms_url'])) {
             $smsurl = str_replace('[number]', urlencode($phone), $config['sms_url']);
             $smsurl = str_replace('[text]', urlencode($txt), $smsurl);

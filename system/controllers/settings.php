@@ -595,6 +595,54 @@ switch ($action) {
         }
         break;
 
+    case 'service-controls':
+        if ($admin['user_type'] != 'Admin') {
+            r2(U . "dashboard", 'e', $_L['Do_Not_Access']);
+        }
+        // Absent/'1' = enabled (default); any other stored value = disabled.
+        $ui->assign('trial_enabled', ($config['hotspot_trial_enabled'] ?? '1') === '1');
+        $ui->assign('sms_enabled',   ($config['sms_enabled'] ?? '1') === '1');
+        run_hook('view_service_controls'); #HOOK
+        $ui->display('settings-service-controls.tpl');
+        break;
+
+    case 'service-controls-post':
+        if ($admin['user_type'] != 'Admin') {
+            r2(U . "dashboard", 'e', $_L['Do_Not_Access']);
+        }
+        // Checkbox semantics: value '1' present = ON, absent = OFF.
+        $newSms   = _post('sms_enabled') === '1' ? '1' : '0';
+        $newTrial = _post('hotspot_trial_enabled') === '1' ? '1' : '0';
+
+        $saveSetting = function ($key, $val) {
+            $d = ORM::for_table('tbl_appconfig')->where('setting', $key)->find_one();
+            if (!$d) {
+                $d = ORM::for_table('tbl_appconfig')->create();
+                $d->setting = $key;
+            }
+            $d->value = $val;
+            $d->save();
+        };
+
+        // Free trial lives on the MikroTik hotspot profile (login-by). Only touch
+        // the router when the value actually changed, and don't persist the
+        // setting if the router update fails (avoid drift between UI and reality).
+        $oldTrial = (($config['hotspot_trial_enabled'] ?? '1') === '1') ? '1' : '0';
+        if ($newTrial !== $oldTrial) {
+            $res = Mikrotik::setHotspotTrial($newTrial === '1');
+            if ($res !== true) {
+                r2(U . 'settings/service-controls', 'e', 'Free trial: router update failed — ' . $res);
+            }
+        }
+
+        $saveSetting('sms_enabled', $newSms);
+        $saveSetting('hotspot_trial_enabled', $newTrial);
+
+        _log('[' . $admin['username'] . '] Service Controls updated: SMS=' . ($newSms === '1' ? 'on' : 'off')
+            . ', Free Trial=' . ($newTrial === '1' ? 'on' : 'off'), 'Admin', $admin['id']);
+        r2(U . 'settings/service-controls', 's', $_L['Settings_Saved_Successfully']);
+        break;
+
     default:
         echo 'action not defined';
 }

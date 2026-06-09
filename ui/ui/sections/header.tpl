@@ -215,6 +215,8 @@
                             <ul class="treeview-menu">
                                 <li {if $_routes[1] eq 'app'}class="active" {/if}><a
                                         href="{$_url}settings/app">{$_L['General_Settings']}</a></li>
+                                <li {if $_routes[1] eq 'service-controls'}class="active" {/if}><a
+                                        href="{$_url}settings/service-controls">Service Controls</a></li>
                                 <li {if $_routes[1] eq 'localisation'}class="active" {/if}><a
                                         href="{$_url}settings/localisation">{$_L['Localisation']}</a></li>
                                 <li {if $_routes[1] eq 'users'}class="active" {/if}><a

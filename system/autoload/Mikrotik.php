@@ -161,6 +161,75 @@ class Mikrotik
         );
     }
 
+    /**
+     * Enable/disable the native MikroTik free trial on every hotspot server's
+     * server-profile, by adding/removing 'trial' from its login-by list.
+     * Removing 'trial' also makes the captive page's $(if trial=='yes') block
+     * disappear, so the trial button hides automatically.
+     *
+     * Returns true on success, or a human-readable error string on failure.
+     */
+    public static function setHotspotTrial($enable)
+    {
+        $router = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+        if (!$router) {
+            return 'no enabled router configured';
+        }
+        $client = self::tryClient($router['ip_address'], $router['username'], $router['password']);
+        if (!$client) {
+            return 'could not connect to router ' . $router['ip_address'];
+        }
+        try {
+            // Profiles actually bound to hotspot servers (skip the unused 'default').
+            $srvReq = new RouterOS\Request('/ip/hotspot/print');
+            $srvReq->setArgument('.proplist', 'profile');
+            $profileNames = [];
+            foreach ($client->sendSync($srvReq) as $r) {
+                if ($r->getType() === RouterOS\Response::TYPE_DATA) {
+                    $p = $r->getProperty('profile');
+                    if ($p !== null && $p !== '') $profileNames[$p] = true;
+                }
+            }
+            if (!$profileNames) {
+                return 'no hotspot server found on router';
+            }
+
+            $changed = 0;
+            foreach (array_keys($profileNames) as $pname) {
+                $pReq = new RouterOS\Request('/ip/hotspot/profile/print');
+                $pReq->setArgument('.proplist', '.id,login-by');
+                $pReq->setQuery(RouterOS\Query::where('name', $pname));
+                $id = null; $loginBy = '';
+                foreach ($client->sendSync($pReq) as $r) {
+                    if ($r->getType() === RouterOS\Response::TYPE_DATA) {
+                        $id      = $r->getProperty('.id');
+                        $loginBy = (string) $r->getProperty('login-by');
+                    }
+                }
+                if ($id === null) continue;
+
+                $methods = array_filter(array_map('trim', explode(',', $loginBy)), 'strlen');
+                $has = in_array('trial', $methods, true);
+                if ($enable && !$has) {
+                    $methods[] = 'trial';
+                } elseif (!$enable && $has) {
+                    $methods = array_values(array_diff($methods, ['trial']));
+                } else {
+                    continue; // already in desired state
+                }
+
+                $setReq = new RouterOS\Request('/ip/hotspot/profile/set');
+                $setReq->setArgument('numbers', $id);
+                $setReq->setArgument('login-by', implode(',', $methods));
+                $client->sendSync($setReq);
+                $changed++;
+            }
+            return true;
+        } catch (Exception $e) {
+            return $e->getMessage();
+        }
+    }
+
     public static function removeHotspotPlan($client, $name){
         $printRequest = new RouterOS\Request(
             '/ip hotspot user profile print .proplist=name',

@@ -95,6 +95,10 @@ services:
       - ./overrides/system/controllers/due-notice.php:/var/www/html/system/controllers/due-notice.php:ro
       - ./overrides/system/due-sync.php:/var/www/html/system/due-sync.php:ro
       - ./overrides/system/cleanup-pppoe.php:/var/www/html/system/cleanup-pppoe.php:ro
+      # Service Controls settings page (free-trial + SMS master switch)
+      - ./overrides/system/controllers/settings.php:/var/www/html/system/controllers/settings.php:ro
+      - ./overrides/system/autoload/Message.php:/var/www/html/system/autoload/Message.php:ro
+      - ./overrides/ui/ui/settings-service-controls.tpl:/var/www/html/ui/ui/settings-service-controls.tpl:ro
     networks:
       - nuxbill-net
 
