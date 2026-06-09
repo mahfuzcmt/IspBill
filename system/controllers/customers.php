@@ -1381,6 +1381,22 @@ switch ($action) {
         r2(U . 'customers/credits', 's', 'Credit amount updated to ' . number_format($newAmount, 0) . ' BDT');
         break;
 
+    case 'credit-delete':
+        // Delete a settled credit-sale row. Routes: customers/credit-delete/{credit_id}
+        // Used to clear out paid entries that no longer need tracking.
+        $creditId = (int) ($routes['2'] ?? 0);
+        $cs = ORM::for_table('tbl_credit_sales')->find_one($creditId);
+        if (!$cs) {
+            r2(U . 'customers/credits&status=paid', 'e', 'Credit sale not found');
+        }
+        $info   = $cs['username'] . ', ' . $cs['plan_name'] . ', ' . $cs['amount'] . ' BDT';
+        $custId = (int) $cs['customer_id'];
+        $cs->delete();
+        _log('Credit #' . $creditId . ' (' . $info . ') deleted by '
+            . ($admin['username'] ?? '?'), 'User', $custId);
+        r2(U . 'customers/credits&status=paid', 's', 'Credit sale deleted');
+        break;
+
     case 'browsing':
     case 'browsing-history':
         // Per-customer DNS query history from the dnsmasq-resolver log file

@@ -85,7 +85,11 @@
                                                 <i class="ion ion-checkmark"></i> Mark Paid
                                             </a>
                                         {else}
-                                            <em class="text-muted">settled</em>
+                                            <a href="{$_url}customers/credit-delete/{$r['id']}"
+                                               class="btn btn-danger btn-xs"
+                                               onclick="return confirm('Delete this settled credit ({$_c['currency_code']} {$r['amount']}, {$r['plan_name']})? This cannot be undone.');">
+                                                <i class="ion ion-trash-a"></i> Delete
+                                            </a>
                                         {/if}
                                     </td>
                                 </tr>
