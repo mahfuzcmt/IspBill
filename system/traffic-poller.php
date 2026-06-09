@@ -197,36 +197,52 @@ try {
                 ? $GLOBALS['config']['wan_interface']
                 : 'ether2-Starlink';
 
-    // 3a. Current rx-bps / tx-bps via /interface/monitor-traffic once=yes
-    $wanRxBps = 0; $wanTxBps = 0; $wanRxPps = 0; $wanTxPps = 0;
+    // The shared $client above can be left desynced by an "Unrecognized
+    // response type" on the hotspot section, which silently zeroes every
+    // WAN reading taken on it. Use a dedicated, freshly-opened connection
+    // for the WAN sample so it is always clean.
+    $wanClient = $client;
     try {
-        $req = new RouterOS\Request('/interface/monitor-traffic');
-        $req->setArgument('interface', $wanIface);
-        $req->setArgument('once', '');
-        foreach ($client->sendSync($req) as $r) {
-            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-            $wanRxBps = (int) $r->getProperty('rx-bits-per-second');
-            $wanTxBps = (int) $r->getProperty('tx-bits-per-second');
-            $wanRxPps = (int) $r->getProperty('rx-packets-per-second');
-            $wanTxPps = (int) $r->getProperty('tx-packets-per-second');
-            break;
-        }
-    } catch (Throwable $e) { $errors[] = 'wan-monitor: ' . $e->getMessage(); }
+        $wanClient = new RouterOS\Client($rt['ip_address'], $rt['username'], $rt['password']);
+    } catch (Throwable $e) { $errors[] = 'wan-conn: ' . $e->getMessage(); }
 
-    // 3b. Cumulative error / drop counters from /interface/print
+    // Read interface byte/packet/error counters once.
+    $wanRead = function ($cl) use ($wanIface) {
+        $q = new RouterOS\Request('/interface/print');
+        $q->setArgument('stats', '');
+        $q->setArgument('.proplist', 'name,rx-byte,tx-byte,rx-packet,tx-packet,rx-error,tx-error,rx-drop,tx-drop');
+        $q->setQuery(RouterOS\Query::where('name', $wanIface));
+        foreach ($cl->sendSync($q) as $r) {
+            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+            return [
+                'rb' => (int) $r->getProperty('rx-byte'),   'tb' => (int) $r->getProperty('tx-byte'),
+                'rp' => (int) $r->getProperty('rx-packet'), 'tp' => (int) $r->getProperty('tx-packet'),
+                're' => (int) $r->getProperty('rx-error'),  'te' => (int) $r->getProperty('tx-error'),
+                'rd' => (int) $r->getProperty('rx-drop'),   'td' => (int) $r->getProperty('tx-drop'),
+            ];
+        }
+        return null;
+    };
+
+    // 3a. Current rx/tx bps from a 1-second byte-counter delta. monitor-traffic
+    //     'once' under-reports badly over the API (~5% of real), so derive the
+    //     rate from counters instead — same approach as the PPPoE samples.
+    $wanRxBps = 0; $wanTxBps = 0; $wanRxPps = 0; $wanTxPps = 0;
     $wanRxError = 0; $wanTxError = 0; $wanRxDrop = 0; $wanTxDrop = 0;
     try {
-        $req = new RouterOS\Request('/interface/print');
-        $req->setArgument('.proplist', 'name,rx-error,tx-error,rx-drop,tx-drop');
-        $req->setQuery(RouterOS\Query::where('name', $wanIface));
-        foreach ($client->sendSync($req) as $r) {
-            if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-            $wanRxError = (int) $r->getProperty('rx-error');
-            $wanTxError = (int) $r->getProperty('tx-error');
-            $wanRxDrop  = (int) $r->getProperty('rx-drop');
-            $wanTxDrop  = (int) $r->getProperty('tx-drop');
+        $s1 = $wanRead($wanClient);
+        usleep(1000000); // 1s window → delta_bytes * 8 = bits/sec
+        $s2 = $wanRead($wanClient);
+        if ($s1 && $s2) {
+            $wanRxBps = max(0, (int) (($s2['rb'] - $s1['rb']) * 8));
+            $wanTxBps = max(0, (int) (($s2['tb'] - $s1['tb']) * 8));
+            $wanRxPps = max(0, (int) ($s2['rp'] - $s1['rp']));
+            $wanTxPps = max(0, (int) ($s2['tp'] - $s1['tp']));
+            // 3b. Cumulative error / drop counters (latest snapshot).
+            $wanRxError = $s2['re']; $wanTxError = $s2['te'];
+            $wanRxDrop  = $s2['rd']; $wanTxDrop  = $s2['td'];
         }
-    } catch (Throwable $e) { $errors[] = 'wan-print: ' . $e->getMessage(); }
+    } catch (Throwable $e) { $errors[] = 'wan-monitor: ' . $e->getMessage(); }
 
     $pdo->prepare(
         "INSERT INTO tbl_wan_samples (interface, rx_bps, tx_bps, rx_pps, tx_pps, rx_error, tx_error, rx_drop, tx_drop)

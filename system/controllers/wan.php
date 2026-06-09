@@ -48,20 +48,31 @@ if ($action === 'data') {
         $rt = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
         if ($rt) {
             $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
-            $name = $iface ?: 'ether2-Starlink';
-            if ($client) try {
-                $req = new RouterOS\Request('/interface/monitor-traffic');
-                $req->setArgument('interface', $name);
-                $req->setArgument('once', '');
-                foreach ($client->sendSync($req) as $r) {
+            $name = $iface ?: ($GLOBALS['config']['wan_interface'] ?? '') ?: 'ether2-Starlink';
+            // Derive the current rate from a 1s byte-counter delta. monitor-traffic
+            // 'once' under-reports heavily over the API, so read counters instead.
+            $readBytes = function ($cl) use ($name) {
+                $q = new RouterOS\Request('/interface/print');
+                $q->setArgument('stats', '');
+                $q->setArgument('.proplist', 'name,rx-byte,tx-byte');
+                $q->setQuery(RouterOS\Query::where('name', $name));
+                foreach ($cl->sendSync($q) as $r) {
                     if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
+                    return ['rb' => (int)$r->getProperty('rx-byte'), 'tb' => (int)$r->getProperty('tx-byte')];
+                }
+                return null;
+            };
+            if ($client) try {
+                $s1 = $readBytes($client);
+                usleep(1000000);
+                $s2 = $readBytes($client);
+                if ($s1 && $s2) {
                     $out['live'] = [
                         'ts'    => time() * 1000,
                         'iface' => $name,
-                        'rxBps' => (int)$r->getProperty('rx-bits-per-second'),
-                        'txBps' => (int)$r->getProperty('tx-bits-per-second'),
+                        'rxBps' => max(0, (int)(($s2['rb'] - $s1['rb']) * 8)),
+                        'txBps' => max(0, (int)(($s2['tb'] - $s1['tb']) * 8)),
                     ];
-                    break;
                 }
             } catch (Throwable $e) {}
         }
