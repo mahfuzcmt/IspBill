@@ -97,7 +97,7 @@ switch ($action) {
         $lastpage   = max(1, (int) ceil(max($total, 1) / $per_page));
         $linkBase   = U . $routes[0] . '/' . $routes[1] . '/';
         $contents   = '<ul class="pagination pagination-sm">';
-        $stq        = '?service_type=' . urlencode($serviceType);
+        $stq        = '&service_type=' . urlencode($serviceType);
         for ($i = 1; $i <= $lastpage; $i++) {
             $contents .= $i == $page
                 ? "<li class='active'><a href='javascript:void(0);'>$i</a></li>"

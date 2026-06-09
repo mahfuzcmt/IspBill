@@ -10,15 +10,15 @@
                 <div class="row" style="margin-bottom:14px">
                     <div class="col-md-6">
                         <div class="btn-group" role="group">
-                            <a href="{$_url}customers/credits?status=due"
+                            <a href="{$_url}customers/credits&status=due"
                                class="btn btn-{if $statusFilter eq 'due'}warning{else}default{/if}">
                                 Due only
                             </a>
-                            <a href="{$_url}customers/credits?status=paid"
+                            <a href="{$_url}customers/credits&status=paid"
                                class="btn btn-{if $statusFilter eq 'paid'}success{else}default{/if}">
                                 Paid only
                             </a>
-                            <a href="{$_url}customers/credits?status=all"
+                            <a href="{$_url}customers/credits&status=all"
                                class="btn btn-{if $statusFilter eq 'all'}primary{else}default{/if}">
                                 All
                             </a>
