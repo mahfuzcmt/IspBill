@@ -266,10 +266,11 @@
 
                 <div class="main-content">
                     <div class="qr-box">
-                        <img src="qrcode/?data={$vs['code']}" alt="QR">
+                        {assign var=qrlogin value="http://10.110.0.1/login?username=`$vs['code']`&password=`$vs['code']`"}
+                        <img src="qrcode/?data={$qrlogin|urlencode}" alt="QR">
                     </div>
                     <div class="code-box">
-                        <div class="code-label">Your Code</div>
+                        <div class="code-label">Scan to connect</div>
                         <div class="code-value">{$vs['code']}</div>
                     </div>
                 </div>
