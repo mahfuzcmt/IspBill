@@ -33,6 +33,14 @@ body{font-family:'Noto Sans Bengali','Hind Siliguri',sans-serif;background:linea
 .trial-box{background:#fff3cd;border:2px solid #f39c12;border-radius:10px;padding:15px;margin-bottom:15px;text-align:center}
 .trial-box h3{color:#856404;font-size:14px;margin-bottom:8px}
 .trial-box p{color:#856404;font-size:12px;margin:0}
+.notice-box{background:#ffe6e6;border:2px solid #d63031;border-radius:10px;padding:15px;margin-bottom:15px;text-align:center}
+.notice-box h3{color:#d63031;font-size:14px;margin-bottom:8px}
+.notice-box p{color:#842029;font-size:12px;margin:0 0 8px}
+.notice-box ul{list-style:none;text-align:left;font-size:12px;color:#842029;background:#fff;border-radius:8px;padding:8px 10px;margin:0 0 10px}
+.notice-box li{padding:5px 0 5px 15px;border-bottom:1px dashed #f1c0c0;position:relative}
+.notice-box li:last-child{border:none}
+.notice-box li::before{content:">";position:absolute;left:0;color:#d63031;font-weight:bold}
+.notice-box .small{font-size:11px;color:#a05252;margin:0}
 .divider{text-align:center;margin:15px 0;color:#999;font-size:12px;position:relative}
 .divider::before,.divider::after{content:"";position:absolute;top:50%;width:40%;height:1px;background:#ddd}
 .divider::before{left:0}
@@ -91,6 +99,20 @@ $(if trial == 'yes')
 </div>
 <button type="submit" class="btn btn-trial" id="trial-btn">ফ্রি ট্রায়াল শুরু করুন</button>
 </form>
+</div>
+<div class="divider">অথবা লগইন করুন</div>
+$(else)
+<!-- Trial quota used up for this device today (trial != yes) -> point to voucher sales -->
+<div class="notice-box">
+<h3>আপনার আজকের ফ্রি ট্রায়াল (১ ঘন্টা) শেষ</h3>
+<p>ইন্টারনেট চালিয়ে যেতে আমাদের নির্ধারিত দোকান থেকে ভাউচার কিনুন:</p>
+<ul>
+<li>বাবুল স্টোর, নলডাঙ্গা পুলিশ ক্যাম্পের পাশে</li>
+<li>শিমুল হার্ডওয়্যার, ধান হাটা, নলডাঙ্গা বাজার</li>
+<li>আহাদ টেলিকম, আলিফ সুপার মার্কেট</li>
+</ul>
+<button type="button" class="btn btn-voucher" onclick="showTab('voucher')">ভাউচার রিডিম করুন</button>
+<p class="small" style="margin-top:8px">আগামীকাল এই ডিভাইসে আবার ১ ঘন্টা ফ্রি পাবেন</p>
 </div>
 <div class="divider">অথবা লগইন করুন</div>
 $(endif)
