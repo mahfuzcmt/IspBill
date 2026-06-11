@@ -179,8 +179,12 @@ try {
             ];
         }
 
+        // started_at is parsed with strtotime() (PHP timezone, same as it was
+        // written) — MySQL UNIX_TIMESTAMP() would read it in the DB server
+        // timezone (UTC in the prod container), shifting it ~6h and delaying
+        // session close-out by the same amount.
         $openTrials = $pdo->query(
-            "SELECT id, mac, ip, UNIX_TIMESTAMP(started_at) AS started_ts
+            "SELECT id, mac, ip, started_at
              FROM tbl_hotspot_trials WHERE ended_at IS NULL"
         )->fetchAll(PDO::FETCH_ASSOC);
         $updT   = $pdo->prepare("UPDATE tbl_hotspot_trials SET bytes_in=:bi, bytes_out=:bo, ip=COALESCE(:ip, ip) WHERE id=:id");
@@ -189,14 +193,19 @@ try {
 
         foreach ($openTrials as $row) {
             $mac = strtoupper((string) $row['mac']);
+            $startedTs = (int) strtotime((string) $row['started_at']);
             if ($mac !== '' && isset($trialActive[$mac])) {
                 $a = $trialActive[$mac];
                 $updT->execute([':bi' => $a['in'], ':bo' => $a['out'], ':ip' => ($a['ip'] ?: $row['ip']), ':id' => $row['id']]);
                 $trialsUpdated++;
-            } elseif ((int) $row['started_ts'] < $graceTs) {
+            } elseif ($startedTs < $graceTs) {
                 // No active trial session and past the grace window -> trial ended.
-                // Existing bytes (from the last active poll) are kept.
-                $closeT->execute([':ea' => $now, ':id' => $row['id']]);
+                // Existing bytes (from the last active poll) are kept. ended_at is
+                // clamped to start + 1h (the router's trial uptime cap) so a close
+                // recorded late — cron downtime, this sweep erroring out — can't
+                // inflate the session duration.
+                $endTs = min($nowTs, $startedTs + 3600);
+                $closeT->execute([':ea' => date('Y-m-d H:i:s', $endTs), ':id' => $row['id']]);
                 $trialsClosed++;
             }
         }
