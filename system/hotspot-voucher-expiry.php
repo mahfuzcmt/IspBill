@@ -201,10 +201,12 @@ try {
             } elseif ($startedTs < $graceTs) {
                 // No active trial session and past the grace window -> trial ended.
                 // Existing bytes (from the last active poll) are kept. ended_at is
-                // clamped to start + 1h (the router's trial uptime cap) so a close
-                // recorded late — cron downtime, this sweep erroring out — can't
-                // inflate the session duration.
-                $endTs = min($nowTs, $startedTs + 3600);
+                // clamped to start + the configured trial uptime (the router's cap)
+                // so a close recorded late — cron downtime, this sweep erroring out
+                // — can't inflate the session duration.
+                $trialCapMin = (int) ($cfg['hotspot_trial_duration_minutes'] ?? 60);
+                if ($trialCapMin < 1) $trialCapMin = 60;
+                $endTs = min($nowTs, $startedTs + $trialCapMin * 60);
                 $closeT->execute([':ea' => date('Y-m-d H:i:s', $endTs), ':id' => $row['id']]);
                 $trialsClosed++;
             }

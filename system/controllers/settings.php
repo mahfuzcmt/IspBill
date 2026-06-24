@@ -602,6 +602,12 @@ switch ($action) {
         // Absent/'1' = enabled (default); any other stored value = disabled.
         $ui->assign('trial_enabled', ($config['hotspot_trial_enabled'] ?? '1') === '1');
         $ui->assign('sms_enabled',   ($config['sms_enabled'] ?? '1') === '1');
+        // Canonical duration is stored in minutes; the unit is display-only so the
+        // admin sees the value back in whatever unit they entered it.
+        $trialMin  = (int) ($config['hotspot_trial_duration_minutes'] ?? 60);
+        $trialUnit = (($config['hotspot_trial_duration_unit'] ?? 'minutes') === 'hours') ? 'hours' : 'minutes';
+        $ui->assign('trial_duration_value', $trialUnit === 'hours' ? intdiv($trialMin, 60) : $trialMin);
+        $ui->assign('trial_duration_unit', $trialUnit);
         run_hook('view_service_controls'); #HOOK
         $ui->display('settings-service-controls.tpl');
         break;
@@ -613,6 +619,14 @@ switch ($action) {
         // Checkbox semantics: value '1' present = ON, absent = OFF.
         $newSms   = _post('sms_enabled') === '1' ? '1' : '0';
         $newTrial = _post('hotspot_trial_enabled') === '1' ? '1' : '0';
+
+        // Trial duration: open numeric input + unit dropdown -> canonical minutes.
+        $durUnit = (_post('hotspot_trial_duration_unit') === 'hours') ? 'hours' : 'minutes';
+        $durVal  = (int) _post('hotspot_trial_duration_value');
+        $newDurMin = ($durUnit === 'hours') ? $durVal * 60 : $durVal;
+        if ($newDurMin < 1 || $newDurMin > 1440) {
+            r2(U . 'settings/service-controls', 'e', 'Trial duration must be between 1 minute and 24 hours.');
+        }
 
         $saveSetting = function ($key, $val) {
             $d = ORM::for_table('tbl_appconfig')->where('setting', $key)->find_one();
@@ -635,11 +649,24 @@ switch ($action) {
             }
         }
 
+        // Trial duration lives on the same hotspot profile (trial-uptime). Push to
+        // the router only when it changed, and bail before persisting on failure.
+        $oldDurMin = (int) ($config['hotspot_trial_duration_minutes'] ?? 60);
+        if ($newDurMin !== $oldDurMin) {
+            $res = Mikrotik::setHotspotTrialUptime($newDurMin);
+            if ($res !== true) {
+                r2(U . 'settings/service-controls', 'e', 'Trial duration: router update failed — ' . $res);
+            }
+        }
+
         $saveSetting('sms_enabled', $newSms);
         $saveSetting('hotspot_trial_enabled', $newTrial);
+        $saveSetting('hotspot_trial_duration_minutes', (string) $newDurMin);
+        $saveSetting('hotspot_trial_duration_unit', $durUnit);
 
         _log('[' . $admin['username'] . '] Service Controls updated: SMS=' . ($newSms === '1' ? 'on' : 'off')
-            . ', Free Trial=' . ($newTrial === '1' ? 'on' : 'off'), 'Admin', $admin['id']);
+            . ', Free Trial=' . ($newTrial === '1' ? 'on' : 'off')
+            . ', Trial Duration=' . $newDurMin . 'm', 'Admin', $admin['id']);
         r2(U . 'settings/service-controls', 's', $_L['Settings_Saved_Successfully']);
         break;
 

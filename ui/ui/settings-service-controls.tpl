@@ -14,12 +14,35 @@
                             <label class="checkbox-inline" style="font-weight:600">
                                 <input type="checkbox" name="hotspot_trial_enabled" value="1"
                                     {if $trial_enabled}checked{/if}>
-                                Enable the 1-hour/day free trial on the captive portal
+                                Enable the free trial on the captive portal
                             </label>
                             <p class="help-block">
                                 When off, the trial button disappears from the login page and the router
                                 rejects new trial logins. This writes <code>login-by</code> on the
                                 MikroTik hotspot profile, so it takes effect immediately.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="col-md-3 control-label">Trial Duration</label>
+                        <div class="col-md-7">
+                            <div class="input-group" style="max-width:260px">
+                                <input type="number" class="form-control" name="hotspot_trial_duration_value"
+                                    min="1" step="1" value="{$trial_duration_value}" required>
+                                <span class="input-group-btn">
+                                    <select class="form-control" name="hotspot_trial_duration_unit"
+                                        style="min-width:110px">
+                                        <option value="minutes" {if $trial_duration_unit == 'minutes'}selected{/if}>minutes</option>
+                                        <option value="hours" {if $trial_duration_unit == 'hours'}selected{/if}>hours</option>
+                                    </select>
+                                </span>
+                            </div>
+                            <p class="help-block">
+                                How long each free trial lasts per device (per MAC), reset daily. This writes
+                                <code>trial-uptime</code> on the MikroTik hotspot profile. New trials get the
+                                updated limit; devices already inside their daily window keep their current
+                                allotment until the next reset. Max 24 hours.
                             </p>
                         </div>
                     </div>
