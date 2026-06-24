@@ -230,6 +230,65 @@ class Mikrotik
         }
     }
 
+    /**
+     * Set the native MikroTik free-trial duration on every bound hotspot
+     * server-profile, by writing trial-uptime-limit. The router enforces this
+     * per MAC; the app only mirrors it for reporting. The daily reset
+     * (trial-uptime-reset) is a separate property and is left untouched.
+     *
+     * Uses the RouterOS v7 REST API (port 80) — the proven write path on this
+     * deployment; the PEAR2 legacy API on 8728 is unreliable for writes here
+     * (see addHotspotUserRest). Returns true on success, or a human-readable
+     * error string on failure.
+     */
+    public static function setHotspotTrialUptime($minutes)
+    {
+        $minutes = (int) $minutes;
+        if ($minutes < 1) {
+            return 'invalid trial duration';
+        }
+        $router = ORM::for_table('tbl_routers')->where('enabled', 1)->find_one();
+        if (!$router) {
+            return 'no enabled router configured';
+        }
+        $host = explode(':', $router['ip_address'])[0];
+        $user = $router['username'];
+        $pass = $router['password'];
+        $rest = 'http://' . $host . '/rest/ip/hotspot';
+
+        // Profiles actually bound to a hotspot server (skip the unused 'default').
+        $srv = self::restRequest($rest . '?.proplist=profile', 'GET', null, $user, $pass);
+        if (!$srv['ok']) {
+            return 'router REST unreachable (' . $srv['error'] . ')';
+        }
+        $profileNames = [];
+        if (is_array($srv['data'])) {
+            foreach ($srv['data'] as $s) {
+                if (!empty($s['profile'])) $profileNames[$s['profile']] = true;
+            }
+        }
+        if (!$profileNames) {
+            return 'no hotspot server found on router';
+        }
+
+        $limit = $minutes . 'm';
+        foreach (array_keys($profileNames) as $pname) {
+            $get = self::restRequest($rest . '/profile?name=' . rawurlencode($pname) . '&.proplist=.id',
+                'GET', null, $user, $pass);
+            if (!$get['ok'] || !is_array($get['data']) || !isset($get['data'][0]['.id'])) {
+                return 'profile lookup failed for ' . $pname . ' (' . $get['error'] . ')';
+            }
+            $id = $get['data'][0]['.id'];
+            // RouterOS REST: PATCH the item by its .id (e.g. "*1") to update.
+            $patch = self::restRequest($rest . '/profile/' . $id, 'PATCH',
+                ['trial-uptime-limit' => $limit], $user, $pass);
+            if (!$patch['ok']) {
+                return 'trial duration set failed on ' . $pname . ' (' . $patch['error'] . ')';
+            }
+        }
+        return true;
+    }
+
     public static function removeHotspotPlan($client, $name){
         $printRequest = new RouterOS\Request(
             '/ip hotspot user profile print .proplist=name',

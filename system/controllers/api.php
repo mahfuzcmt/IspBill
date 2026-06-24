@@ -31,8 +31,35 @@ switch ($action) {
         hotspot_trial();
         break;
 
+    case 'hotspot-trial-info':
+        hotspot_trial_info();
+        break;
+
     default:
         json_response(false, 'Invalid API endpoint');
+}
+
+/**
+ * Return the configured free-trial duration so the captive portal (login.html,
+ * served statically by the router) can show it without being re-uploaded each
+ * time the admin changes it. Best-effort: the portal falls back to its static
+ * default if this endpoint is unreachable.
+ */
+function hotspot_trial_info() {
+    global $config;
+    $min = (int) ($config['hotspot_trial_duration_minutes'] ?? 60);
+    if ($min < 1) $min = 60;
+
+    // Bengali label to match the portal copy: whole hours -> "X ঘন্টা", else "X মিনিট".
+    $toBn = function ($n) {
+        return strtr((string) $n, [
+            '0' => '০', '1' => '১', '2' => '২', '3' => '৩', '4' => '৪',
+            '5' => '৫', '6' => '৬', '7' => '৭', '8' => '৮', '9' => '৯',
+        ]);
+    };
+    $label = ($min % 60 === 0) ? ($toBn($min / 60) . ' ঘন্টা') : ($toBn($min) . ' মিনিট');
+
+    json_response(true, $label, ['minutes' => $min, 'label' => $label]);
 }
 
 /**
@@ -64,15 +91,19 @@ function hotspot_trial() {
         $mac = '';
     }
 
+    global $config;
+    $trialMin = (int) ($config['hotspot_trial_duration_minutes'] ?? 60);
+    if ($trialMin < 1) $trialMin = 60;
+
     try {
         // Reuse the current open trial row for this MAC if it started within the
-        // 1-hour trial window — avoids double-counting rapid re-submits/relogins.
+        // trial window — avoids double-counting rapid re-submits/relogins.
         $open = null;
         if ($mac !== '') {
             $open = ORM::for_table('tbl_hotspot_trials')
                 ->where('mac', $mac)
                 ->where_null('ended_at')
-                ->where_gt('started_at', date('Y-m-d H:i:s', strtotime('-1 hour')))
+                ->where_gt('started_at', date('Y-m-d H:i:s', strtotime("-{$trialMin} minutes")))
                 ->order_by_desc('id')
                 ->find_one();
         }

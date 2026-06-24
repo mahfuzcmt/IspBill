@@ -81,8 +81,8 @@ $(if error)<div class="err">$(error)</div>$(endif)
 <!-- Free Trial Section (only shown when the client is still trial-eligible) -->
 $(if trial == 'yes')
 <div class="trial-box">
-<h3>* ১ ঘন্টা ফ্রি ইন্টারনেট *</h3>
-<p>নাম ও মোবাইল নম্বর দিয়ে ১ ঘন্টা বিনামূল্যে ইন্টারনেট</p>
+<h3>* <span class="js-trial-dur">১ ঘন্টা</span> ফ্রি ইন্টারনেট *</h3>
+<p>নাম ও মোবাইল নম্বর দিয়ে <span class="js-trial-dur">১ ঘন্টা</span> বিনামূল্যে ইন্টারনেট</p>
 <div id="trial-message"></div>
 <form name="trial" id="trialForm" action="$(link-login-only)" method="post">
 <input type="hidden" name="dst" value="$(link-orig)">
@@ -104,7 +104,7 @@ $(if trial == 'yes')
 $(else)
 <!-- Trial quota used up for this device today (trial != yes) -> point to voucher sales -->
 <div class="notice-box">
-<h3>আপনার আজকের ফ্রি ট্রায়াল (১ ঘন্টা) শেষ</h3>
+<h3>আপনার আজকের ফ্রি ট্রায়াল (<span class="js-trial-dur">১ ঘন্টা</span>) শেষ</h3>
 <p>ইন্টারনেট চালিয়ে যেতে আমাদের নির্ধারিত দোকান থেকে ভাউচার কিনুন:</p>
 <ul>
 <li>বাবুল স্টোর, নলডাঙ্গা পুলিশ ক্যাম্পের পাশে</li>
@@ -112,7 +112,7 @@ $(else)
 <li>আহাদ টেলিকম, আলিফ সুপার মার্কেট</li>
 </ul>
 <button type="button" class="btn btn-voucher" onclick="showTab('voucher')">ভাউচার রিডিম করুন</button>
-<p class="small" style="margin-top:8px">আগামীকাল এই ডিভাইসে আবার ১ ঘন্টা ফ্রি পাবেন</p>
+<p class="small" style="margin-top:8px">আগামীকাল এই ডিভাইসে আবার <span class="js-trial-dur">১ ঘন্টা</span> ফ্রি পাবেন</p>
 </div>
 <div class="divider">অথবা লগইন করুন</div>
 $(endif)
@@ -237,6 +237,28 @@ document.querySelector('#voucher form').onsubmit = function() {
     document.querySelector('#voucher input[name="password"]').value = code;
     return true;
 };
+
+// Sync the displayed trial duration with the admin setting. login.html is served
+// statically by the router and can't read app config, so we fetch the configured
+// label on load and fill every .js-trial-dur span. Best-effort: if the billing
+// server is unreachable, the static "১ ঘন্টা" default already in the markup stays.
+(function() {
+    var spans = document.getElementsByClassName('js-trial-dur');
+    if (!spans.length) return;
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'http://103.187.22.131:8081/index.php?_route=api/hotspot-trial-info', true);
+    xhr.timeout = 4000;
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            var label = res && res.data && res.data.label;
+            if (label) {
+                for (var i = 0; i < spans.length; i++) spans[i].textContent = label;
+            }
+        } catch (e) { /* keep the static default */ }
+    };
+    xhr.send();
+})();
 
 // Free trial - capture name + mobile in the billing system, then start the
 // Mikrotik native trial. The API call is best-effort: the trial must never be

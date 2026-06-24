@@ -44,19 +44,21 @@ switch ($action) {
         // Timestamps are written with PHP date() in the app timezone, but MySQL
         // NOW() runs in the DB server timezone (UTC in the prod container), so
         // open sessions must be measured against a PHP-supplied "now". Each
-        // session is also clamped to 0..60 minutes: the router caps a trial at
-        // 1h/day per MAC, and rows closed late by the cron sweep would
-        // otherwise inflate the total.
+        // session is also clamped to 0..<trial duration> minutes: the router caps
+        // a trial at that uptime per MAC, and rows closed late by the cron sweep
+        // would otherwise inflate the total.
+        $trialCapMin = (int) ($config['hotspot_trial_duration_minutes'] ?? 60);
+        if ($trialCapMin < 1) $trialCapMin = 60;
         $grouped = ORM::for_table('tbl_hotspot_trials')->raw_query(
             "SELECT phone,
                     SUBSTRING_INDEX(GROUP_CONCAT(name ORDER BY id DESC SEPARATOR '||'),'||',1) AS name,
                     COUNT(*) AS times,
                     SUM(bytes_in + bytes_out) AS total_bytes,
-                    SUM(LEAST(GREATEST(TIMESTAMPDIFF(MINUTE, started_at, COALESCE(ended_at, ?)), 0), 60)) AS total_minutes,
+                    SUM(LEAST(GREATEST(TIMESTAMPDIFF(MINUTE, started_at, COALESCE(ended_at, ?)), 0), ?)) AS total_minutes,
                     MAX(started_at) AS last_used
              FROM tbl_hotspot_trials
              GROUP BY phone
-             ORDER BY last_used DESC", [date('Y-m-d H:i:s')]
+             ORDER BY last_used DESC", [date('Y-m-d H:i:s'), $trialCapMin]
         )->find_many();
         $sessions = ORM::for_table('tbl_hotspot_trials')
             ->order_by_desc('id')->limit(200)->find_many();
