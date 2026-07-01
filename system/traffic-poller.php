@@ -41,28 +41,29 @@ try {
     $dataByUser = [];
     $pppoeInterfaces = [];
     try {
-        $req = new RouterOS\Request('/queue/simple/print');
-        $req->setArgument('stats', 'yes');
-        $req->setArgument('.proplist', 'name,bytes,rate');
+        // Read cumulative bytes from each customer's PPPoE interface
+        // (<pppoe-USER>). The per-user simple queue undercounts real traffic on
+        // this deployment, so the interface counters are the accurate source.
+        // interface rx = from client = upload; tx = to client = download. The
+        // rate is derived from the byte delta below (monitor-traffic reads ~0
+        // on this RouterOS).
+        $req = new RouterOS\Request('/interface/print');
+        $req->setArgument('stats', '');
+        $req->setArgument('.proplist', 'name,rx-byte,tx-byte');
         foreach ($client->sendSync($req) as $r) {
             if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-            $qname = $r->getProperty('name');
-            $user  = preg_match('/^<pppoe-(.+)>$/', $qname, $m) ? $m[1] : trim($qname, '<>');
-            $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-            // Instantaneous queue rate (bits/sec, upload/download) — this is what
-            // Winbox shows. The byte-delta below only yields the average over the
-            // whole minute, which flattens bursts; we keep whichever is higher so
-            // real peaks are visible on the graph instead of a near-flat line.
-            $rate  = explode('/', $r->getProperty('rate') ?: '0/0');
+            $ifname = $r->getProperty('name');
+            if (!preg_match('/^<pppoe-(.+)>$/', $ifname, $m)) continue;
+            $user = $m[1];
             $dataByUser[$user] = [
-                'rate_in'   => (int) ($rate[0] ?? 0),
-                'rate_out'  => (int) ($rate[1] ?? 0),
-                'bytes_in'  => (int) ($bytes[0] ?? 0),
-                'bytes_out' => (int) ($bytes[1] ?? 0),
+                'rate_in'   => 0,
+                'rate_out'  => 0,
+                'bytes_in'  => (int) $r->getProperty('rx-byte'),
+                'bytes_out' => (int) $r->getProperty('tx-byte'),
             ];
-            $pppoeInterfaces[] = '<pppoe-' . $user . '>';
+            $pppoeInterfaces[] = $ifname;
         }
-    } catch (Throwable $e) { $errors[] = 'queue: ' . $e->getMessage(); }
+    } catch (Throwable $e) { $errors[] = 'iface-bytes: ' . $e->getMessage(); }
 
     // -----------------------------------------------------------------
     // 1b. Per-customer rate from cumulative-byte deltas vs the previous
@@ -84,10 +85,10 @@ try {
                     // bytes_in = upload (from customer), bytes_out = download
                     $dIn  = $s['bytes_in']  - (int) $prev['bytes_in'];
                     $dOut = $s['bytes_out'] - (int) $prev['bytes_out'];
-                    // Keep the instantaneous queue rate set above unless the
-                    // minute-average byte-delta is higher (sustained transfer).
-                    if ($dIn  > 0) $dataByUser[$user]['rate_in']  = max($dataByUser[$user]['rate_in'],  (int) ($dIn  * 8 / $dt));
-                    if ($dOut > 0) $dataByUser[$user]['rate_out'] = max($dataByUser[$user]['rate_out'], (int) ($dOut * 8 / $dt));
+                    // Rate = per-minute byte-delta average (bits/sec). rate_in/out
+                    // start at 0, so this simply takes the delta-derived rate.
+                    if ($dIn  > 0) $dataByUser[$user]['rate_in']  = (int) ($dIn  * 8 / $dt);
+                    if ($dOut > 0) $dataByUser[$user]['rate_out'] = (int) ($dOut * 8 / $dt);
                 }
             }
         }

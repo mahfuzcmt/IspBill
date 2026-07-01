@@ -965,34 +965,32 @@ switch ($action) {
                             ];
                         }
                     } else {
-                    // Get cumulative bytes from queue
+                    // PPPoE: read cumulative bytes from the customer's interface
+                    // (<pppoe-USER>). The per-user simple queue undercounts real
+                    // traffic on this deployment, so the interface counters are the
+                    // accurate source. rx-byte = into router from client = customer
+                    // upload; tx-byte = out to client = customer download.
                     try {
-                        $req = new RouterOS\Request('/queue/simple/print');
-                        $req->setArgument('stats', 'yes');
-                        $req->setArgument('.proplist', 'name,bytes,rate');
+                        $req = new RouterOS\Request('/interface/print');
+                        $req->setArgument('stats', '');
+                        $req->setArgument('.proplist', 'name,rx-byte,tx-byte');
                         $req->setQuery(RouterOS\Query::where('name', '<pppoe-' . $username . '>'));
                         foreach ($client->sendSync($req) as $r) {
                             if ($r->getType() !== RouterOS\Response::TYPE_DATA) continue;
-                            $bytes = explode('/', $r->getProperty('bytes') ?: '0/0');
-                            // Instantaneous queue rate (bits/sec) — matches Winbox.
-                            // The byte-delta below is only a ~60s average; using the
-                            // queue rate makes "Current ↓/↑" reflect real speed.
-                            $rate  = explode('/', $r->getProperty('rate') ?: '0/0');
                             $out['live'] = [
                                 'ts'       => time() * 1000,
-                                'rateIn'   => (int) ($rate[0] ?? 0),
-                                'rateOut'  => (int) ($rate[1] ?? 0),
-                                'bytesIn'  => (int) ($bytes[0] ?? 0),
-                                'bytesOut' => (int) ($bytes[1] ?? 0),
+                                'rateIn'   => 0,
+                                'rateOut'  => 0,
+                                'bytesIn'  => (int) $r->getProperty('rx-byte'),
+                                'bytesOut' => (int) $r->getProperty('tx-byte'),
                             ];
                         }
-                    } catch (Throwable $e) { /* user has no dynamic queue (offline) */ }
+                    } catch (Throwable $e) { /* interface absent (offline) */ }
 
                     // Derive current rate from the byte delta vs the most recent
-                    // stored sample. /interface/monitor-traffic reads 0 for normal
-                    // traffic on this RouterOS, so it cannot drive the rate. Live
-                    // bytes here come from the queue (cumulative), matching the
-                    // stored samples, so the delta is valid.
+                    // stored sample. monitor-traffic reads ~0 on this RouterOS, so
+                    // the cumulative-counter delta is the reliable rate source; the
+                    // poller stores the same interface counters, so the delta is valid.
                     if ($out['live']) {
                         try {
                             $prev = ORM::for_table('tbl_traffic_samples')->raw_query(
@@ -1005,10 +1003,8 @@ switch ($action) {
                                 if ($dt > 0) {
                                     $dIn  = (int) $out['live']['bytesIn']  - (int) $prev['bytes_in'];
                                     $dOut = (int) $out['live']['bytesOut'] - (int) $prev['bytes_out'];
-                                    // Prefer the higher of the instantaneous queue
-                                    // rate (set above) and the ~60s byte-delta average.
-                                    if ($dIn  > 0) $out['live']['rateIn']  = max((int) $out['live']['rateIn'],  (int) ($dIn  * 8 / $dt));
-                                    if ($dOut > 0) $out['live']['rateOut'] = max((int) $out['live']['rateOut'], (int) ($dOut * 8 / $dt));
+                                    if ($dIn  > 0) $out['live']['rateIn']  = (int) ($dIn  * 8 / $dt);
+                                    if ($dOut > 0) $out['live']['rateOut'] = (int) ($dOut * 8 / $dt);
                                 }
                             }
                         } catch (Throwable $e) { /* no prior sample to delta against */ }
