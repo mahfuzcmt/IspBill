@@ -97,6 +97,10 @@ $(if trial == 'yes')
 <label>মোবাইল নম্বর</label>
 <input type="tel" id="trial-phone" placeholder="01XXXXXXXXX" autocomplete="off">
 </div>
+<div class="field">
+<label>ডিভাইস MAC (স্বয়ংক্রিয়)</label>
+<input type="text" id="trial-mac" value="$(mac)" readonly autocomplete="off">
+</div>
 <button type="submit" class="btn btn-trial" id="trial-btn">ফ্রি ট্রায়াল শুরু করুন</button>
 </form>
 </div>
@@ -148,6 +152,10 @@ $(endif)
 <div class="field">
 <label>আপনার নাম</label>
 <input type="text" id="reg-name" placeholder="আপনার পুরো নাম" required autocomplete="off">
+</div>
+<div class="field">
+<label>ডিভাইস MAC (স্বয়ংক্রিয়)</label>
+<input type="text" id="reg-mac" value="$(mac)" readonly autocomplete="off">
 </div>
 <button type="submit" class="btn btn-register" id="reg-btn">রেজিস্টার করুন</button>
 </form>
@@ -260,6 +268,24 @@ document.querySelector('#voucher form').onsubmit = function() {
     xhr.send();
 })();
 
+// MAC field: Mikrotik substitutes $(mac) with the client's real device MAC when
+// this page is served by the hotspot. Lock it read-only so it can't be faked. If
+// it wasn't substituted (empty, or the page is opened outside the hotspot), let
+// the user type it instead.
+function initMacField(el) {
+    if (!el) return;
+    var v = (el.value || '').trim();
+    if (!/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(v)) {
+        el.value = '';
+        el.removeAttribute('readonly');
+        el.placeholder = 'XX:XX:XX:XX:XX:XX';
+    } else {
+        el.setAttribute('readonly', 'readonly');
+    }
+}
+initMacField(document.getElementById('trial-mac'));
+initMacField(document.getElementById('reg-mac'));
+
 // Free trial - capture name + mobile in the billing system, then start the
 // Mikrotik native trial. The API call is best-effort: the trial must never be
 // blocked by a billing-server hiccup, so any failure/timeout still proceeds.
@@ -269,6 +295,7 @@ if (trialForm) {
         e.preventDefault();
         var name  = (document.getElementById('trial-name').value || '').trim();
         var phone = (document.getElementById('trial-phone').value || '').replace(/\s/g,'');
+        var mac   = (document.getElementById('trial-mac').value || '').trim();
         var msg   = document.getElementById('trial-message');
         var btn   = document.getElementById('trial-btn');
 
@@ -295,7 +322,7 @@ if (trialForm) {
         xhr.onerror = startTrial;
         xhr.ontimeout = startTrial;
         xhr.send('name=' + encodeURIComponent(name) + '&phone=' + encodeURIComponent(phone) +
-                 '&mac=$(mac)&ip=$(ip)');
+                 '&mac=' + encodeURIComponent(mac) + '&ip=$(ip)');
         return false;
     };
 }
@@ -306,6 +333,7 @@ document.getElementById('registerForm').onsubmit = function(e) {
 
     var phone = document.getElementById('reg-phone').value.replace(/\s/g,'');
     var name = document.getElementById('reg-name').value.trim();
+    var mac = (document.getElementById('reg-mac').value || '').trim();
     var btn = document.getElementById('reg-btn');
     var msg = document.getElementById('reg-message');
 
@@ -369,7 +397,8 @@ document.getElementById('registerForm').onsubmit = function(e) {
         msg.innerHTML = callMsg;
     };
 
-    xhr.send('phone=' + encodeURIComponent(phone) + '&name=' + encodeURIComponent(name));
+    xhr.send('phone=' + encodeURIComponent(phone) + '&name=' + encodeURIComponent(name) +
+             '&mac=' + encodeURIComponent(mac));
 };
 </script>
 </body>

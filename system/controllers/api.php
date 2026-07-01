@@ -140,6 +140,12 @@ function hotspot_register() {
     // Get POST data
     $phone = trim($_POST['phone'] ?? '');
     $name = trim($_POST['name'] ?? '');
+    // Device MAC auto-filled from the captive portal ($(mac)); locked there so it
+    // can't be faked. Kept only if it looks like a real MAC.
+    $mac = trim($_POST['mac'] ?? '');
+    if (!preg_match('/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/', $mac)) {
+        $mac = '';
+    }
 
     // Validate phone number (11 digits starting with 01)
     if (!preg_match('/^01[3-9][0-9]{8}$/', $phone)) {
@@ -189,7 +195,7 @@ function hotspot_register() {
         $customer->fullname = $name;
         $customer->phonenumber = $phone;
         $customer->email = $phone . '@hotspot.local';
-        $customer->address = 'Hotspot Registration';
+        $customer->address = 'Hotspot Registration' . ($mac !== '' ? ' · MAC ' . $mac : '');
         $customer->created_at = date('Y-m-d H:i:s');
         $customer->save();
 
