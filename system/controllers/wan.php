@@ -63,15 +63,22 @@ if ($action === 'data') {
                 return null;
             };
             if ($client) try {
+                // Divide by the ACTUAL elapsed time between the two counter
+                // reads (not an assumed 1.0s) — the reads themselves take API
+                // round-trip time, so treating the delta as exactly 1s inflates
+                // the rate. Matches the per-customer sampling in traffic-poller.
                 $s1 = $readBytes($client);
+                $t1 = microtime(true);
                 usleep(1000000);
                 $s2 = $readBytes($client);
-                if ($s1 && $s2) {
+                $t2 = microtime(true);
+                $dt = $t2 - $t1;
+                if ($s1 && $s2 && $dt > 0) {
                     $out['live'] = [
                         'ts'    => time() * 1000,
                         'iface' => $name,
-                        'rxBps' => max(0, (int)(($s2['rb'] - $s1['rb']) * 8)),
-                        'txBps' => max(0, (int)(($s2['tb'] - $s1['tb']) * 8)),
+                        'rxBps' => max(0, (int) round(($s2['rb'] - $s1['rb']) * 8 / $dt)),
+                        'txBps' => max(0, (int) round(($s2['tb'] - $s1['tb']) * 8 / $dt)),
                     ];
                 }
             } catch (Throwable $e) {}

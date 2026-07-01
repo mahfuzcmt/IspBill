@@ -230,14 +230,21 @@ try {
     $wanRxBps = 0; $wanTxBps = 0; $wanRxPps = 0; $wanTxPps = 0;
     $wanRxError = 0; $wanTxError = 0; $wanRxDrop = 0; $wanTxDrop = 0;
     try {
+        // Divide by the ACTUAL elapsed time between the two reads, not an
+        // assumed 1.0s — the counter reads take API round-trip time, so
+        // treating the delta as exactly 1s inflates the rate. Same approach as
+        // the per-customer sampling above ($dt).
         $s1 = $wanRead($wanClient);
-        usleep(1000000); // 1s window → delta_bytes * 8 = bits/sec
+        $t1 = microtime(true);
+        usleep(1000000);
         $s2 = $wanRead($wanClient);
-        if ($s1 && $s2) {
-            $wanRxBps = max(0, (int) (($s2['rb'] - $s1['rb']) * 8));
-            $wanTxBps = max(0, (int) (($s2['tb'] - $s1['tb']) * 8));
-            $wanRxPps = max(0, (int) ($s2['rp'] - $s1['rp']));
-            $wanTxPps = max(0, (int) ($s2['tp'] - $s1['tp']));
+        $t2 = microtime(true);
+        $dt = $t2 - $t1;
+        if ($s1 && $s2 && $dt > 0) {
+            $wanRxBps = max(0, (int) round(($s2['rb'] - $s1['rb']) * 8 / $dt));
+            $wanTxBps = max(0, (int) round(($s2['tb'] - $s1['tb']) * 8 / $dt));
+            $wanRxPps = max(0, (int) round(($s2['rp'] - $s1['rp']) / $dt));
+            $wanTxPps = max(0, (int) round(($s2['tp'] - $s1['tp']) / $dt));
             // 3b. Cumulative error / drop counters (latest snapshot).
             $wanRxError = $s2['re']; $wanTxError = $s2['te'];
             $wanRxDrop  = $s2['rd']; $wanTxDrop  = $s2['td'];
