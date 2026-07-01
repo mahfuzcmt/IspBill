@@ -414,6 +414,68 @@ class Mikrotik
     }
 
     /**
+     * Provision (create or replace) a hotspot user for a paid plan via the
+     * RouterOS v7 REST API — the proven path on this deployment. The legacy
+     * PEAR2 API returns "Unrecognized response type" for hotspot user *add*
+     * on this RouterOS version, so voucher redemption / recharge must not rely
+     * on addHotspotUser() to actually create the router account.
+     *
+     * Any pre-existing user with the same name is deleted first so a renewal /
+     * plan change gets a fresh profile, limits, and zeroed usage counters
+     * (mirrors the remove-then-add behaviour of the legacy path).
+     *
+     * @param string $ip       ip_address from tbl_routers (any :apiport is ignored — REST is http/80)
+     * @param array  $plan     tbl_plans row (name_plan, typebp, limit_type, time_limit/unit, data_limit/unit)
+     * @param array  $customer tbl_customers row (username, password)
+     * @throws Exception on connection/HTTP failure so the caller can log it
+     */
+    public static function upsertHotspotUserRest($ip, $user, $pass, $plan, $customer)
+    {
+        $host = explode(':', $ip)[0];
+        $base = 'http://' . $host . '/rest/ip/hotspot/user';
+
+        // Delete any existing user(s) with this name so the new plan replaces
+        // the old profile/limits/counters.
+        $check = self::restRequest($base . '?name=' . rawurlencode($customer['username']), 'GET', null, $user, $pass);
+        if (!$check['ok']) {
+            throw new Exception('REST unreachable (' . $check['error'] . ')');
+        }
+        if (is_array($check['data'])) {
+            foreach ($check['data'] as $existing) {
+                if (!empty($existing['.id'])) {
+                    self::restRequest($base . '/' . rawurlencode($existing['.id']), 'DELETE', null, $user, $pass);
+                }
+            }
+        }
+
+        // Build the create payload: profile = plan name, plus usage limits for
+        // Limited plans (mirrors addHotspotUser()).
+        $payload = [
+            'name'     => $customer['username'],
+            'password' => $customer['password'],
+            'profile'  => $plan['name_plan'],
+        ];
+        if ($plan['typebp'] == 'Limited') {
+            if ($plan['limit_type'] == 'Time_Limit' || $plan['limit_type'] == 'Both_Limit') {
+                $payload['limit-uptime'] = ($plan['time_unit'] == 'Hrs')
+                    ? $plan['time_limit'] . ':00:00'
+                    : '00:' . $plan['time_limit'] . ':00';
+            }
+            if ($plan['limit_type'] == 'Data_Limit' || $plan['limit_type'] == 'Both_Limit') {
+                $payload['limit-bytes-total'] = ($plan['data_unit'] == 'GB')
+                    ? $plan['data_limit'] . '000000000'
+                    : $plan['data_limit'] . '000000';
+            }
+        }
+
+        $add = self::restRequest($base, 'PUT', $payload, $user, $pass);
+        if (!$add['ok']) {
+            throw new Exception('REST add failed (' . $add['error'] . ')');
+        }
+        return true;
+    }
+
+    /**
      * Minimal RouterOS REST helper using the built-in HTTP stream wrapper
      * (the curl extension is not installed in the app container). Returns
      * ['ok' => bool, 'error' => string, 'data' => mixed].

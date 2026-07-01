@@ -74,36 +74,13 @@ if ($httpCode === 200) {
     }
 }
 
-// Create new user
-$createUrl = "http://{$ROUTER_IP}:{$ROUTER_PORT}/rest/ip/hotspot/user";
-$userData = [
-    'name' => $phone,
-    'password' => $password,
-    'profile' => $HOTSPOT_PROFILE,
-    'comment' => $name
-];
-
-$ch = curl_init($createUrl);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_USERPWD, "{$ROUTER_USER}:{$ROUTER_PASS}");
-curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($userData));
-curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if ($httpCode === 201 || $httpCode === 200) {
-    echo json_encode([
-        'success' => true,
-        'message' => 'রেজিস্ট্রেশন সফল!',
-        'phone' => $phone,
-        'password' => $password
-    ]);
-} else {
-    echo json_encode([
-        'success' => false,
-        'message' => 'রেজিস্ট্রেশন ব্যর্থ। আবার চেষ্টা করুন।'
-    ]);
-}
+// DISABLED: this standalone proxy created a hotspot user directly on the
+// router's 'default' profile with NO billing record, granting free internet
+// without a voucher. All registration now goes through the app endpoint
+// (index.php?_route=api/hotspot-register), which creates a billing account
+// only; internet access is provisioned exclusively on voucher redemption.
+echo json_encode([
+    'success' => false,
+    'message' => 'এই রেজিস্ট্রেশন লিংকটি বন্ধ করা হয়েছে। অনুগ্রহ করে অ্যাপের রেজিস্ট্রেশন পেজ ব্যবহার করুন।'
+]);
+exit;

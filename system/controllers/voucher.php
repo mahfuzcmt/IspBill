@@ -54,10 +54,14 @@ switch ($action) {
             if ($v1['type'] == 'Hotspot') {
                 if ($b) {
                     if (!$config['radius_mode']) {
-                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        if ($client) {
-                            try { Mikrotik::removeHotspotUser($client, $c['username']); } catch (Throwable $e) {}
-                            try { Mikrotik::addHotspotUser($client, $p, $c); } catch (Throwable $e) {}
+                        // Provision via REST (proven path on this RouterOS). The
+                        // legacy addHotspotUser() fails to create the user here,
+                        // and registration no longer pre-creates it, so this is
+                        // what actually grants the paid customer access.
+                        try {
+                            Mikrotik::upsertHotspotUserRest($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password'], $p, $c);
+                        } catch (Throwable $e) {
+                            _log('Voucher hotspot provisioning failed for ' . $c['username'] . ': ' . $e->getMessage());
                         }
                     }
                     $b->customer_id = $user['id'];
@@ -88,9 +92,11 @@ switch ($action) {
                     $t->save();
                 } else {
                     if (!$config['radius_mode']) {
-                        $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                        if ($client) {
-                            try { Mikrotik::addHotspotUser($client, $p, $c); } catch (Throwable $e) {}
+                        // Provision via REST (proven path on this RouterOS).
+                        try {
+                            Mikrotik::upsertHotspotUserRest($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password'], $p, $c);
+                        } catch (Throwable $e) {
+                            _log('Voucher hotspot provisioning failed for ' . $c['username'] . ': ' . $e->getMessage());
                         }
                     }
 

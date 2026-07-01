@@ -177,7 +177,12 @@ function hotspot_register() {
     $password = substr($phone, -6);
 
     try {
-        // Create customer in database
+        // Create the billing customer account ONLY. Internet access is NOT
+        // granted at registration — no Mikrotik hotspot user is created here.
+        // Access is provisioned exclusively when the customer redeems a valid
+        // voucher (voucher/activation-post) or is recharged (Package::recharge),
+        // which creates the hotspot user with the paid plan's profile + limits.
+        // This closes the "register = free internet" business loss.
         $customer = ORM::for_table('tbl_customers')->create();
         $customer->username = $phone;
         $customer->password = $password;
@@ -188,32 +193,10 @@ function hotspot_register() {
         $customer->created_at = date('Y-m-d H:i:s');
         $customer->save();
 
-        // Create hotspot user on Mikrotik. The enabled column is a tinyint(1),
-        // so match 1 (not the legacy 'yes'). Try each enabled router until one
-        // connects — tryClient() returns null instead of die()-ing, so an
-        // unreachable router never aborts the JSON response or rolls back the
-        // customer we just created in the database.
-        $routers = ORM::for_table('tbl_routers')
-            ->where('enabled', 1)
-            ->find_many();
-
-        foreach ($routers as $router) {
-            try {
-                Mikrotik::addHotspotUserRest(
-                    $router['ip_address'], $router['username'], $router['password'],
-                    $phone, $password, 'default', $name
-                );
-                break; // created (or already present) on a reachable router
-            } catch (Throwable $e) {
-                _log("Hotspot Registration: Mikrotik add failed on {$router['ip_address']}: " . $e->getMessage());
-                continue;
-            }
-        }
-
         // Log the registration
-        _log("Hotspot Registration: {$phone} ({$name}) registered successfully");
+        _log("Hotspot Registration: {$phone} ({$name}) registered (no access until a voucher is redeemed)");
 
-        json_response(true, 'রেজিস্ট্রেশন সফল! এখন সাইন ইন করুন। পাসওয়ার্ড: ' . $password);
+        json_response(true, 'রেজিস্ট্রেশন সফল! ইন্টারনেট চালু করতে একটি ভাউচার রিডিম করুন। আপনার পাসওয়ার্ড: ' . $password);
 
     } catch (Exception $e) {
         _log("Hotspot Registration Error: " . $e->getMessage());

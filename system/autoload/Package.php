@@ -50,10 +50,12 @@ class Package
         if ($p['type'] == 'Hotspot') {
             if ($b) {
                 if (!$_c['radius_mode']) {
-                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    if ($client) {
-                        try { Mikrotik::removeHotspotUser($client, $c['username']); } catch (Throwable $e) {}
-                        try { Mikrotik::addHotspotUser($client, $p, $c); } catch (Throwable $e) {}
+                    // Provision via REST (proven path on this RouterOS); the
+                    // legacy addHotspotUser() does not create the user here.
+                    try {
+                        Mikrotik::upsertHotspotUserRest($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password'], $p, $c);
+                    } catch (Throwable $e) {
+                        _log('Recharge hotspot provisioning failed for ' . $c['username'] . ': ' . $e->getMessage());
                     }
                 }
 
@@ -85,9 +87,11 @@ class Package
                 $t->save();
             } else {
                 if (!$_c['radius_mode']) {
-                    $client = Mikrotik::tryClient($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password']);
-                    if ($client) {
-                        try { Mikrotik::addHotspotUser($client, $p, $c); } catch (Throwable $e) {}
+                    // Provision via REST (proven path on this RouterOS).
+                    try {
+                        Mikrotik::upsertHotspotUserRest($mikrotik['ip_address'], $mikrotik['username'], $mikrotik['password'], $p, $c);
+                    } catch (Throwable $e) {
+                        _log('Recharge hotspot provisioning failed for ' . $c['username'] . ': ' . $e->getMessage());
                     }
                 }
 
