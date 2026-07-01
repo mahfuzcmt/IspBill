@@ -201,6 +201,22 @@ switch ($action) {
                         }
                     }
                 }
+
+                // Hotspot active sessions key on the "user" property (not "name").
+                // Without this, hotspot users seeded above always stay active=false
+                // and therefore always render as "Offline".
+                $req = new RouterOS\Request('/ip/hotspot/active/print');
+                $req->setArgument('.proplist', 'user,address,uptime');
+                foreach ($client->sendSync($req) as $r) {
+                    if ($r->getType() === RouterOS\Response::TYPE_DATA) {
+                        $name = $r->getProperty('user');
+                        if (isset($liveState[$name])) {
+                            $liveState[$name]['active']  = true;
+                            $liveState[$name]['address'] = $r->getProperty('address');
+                            $liveState[$name]['uptime']  = $r->getProperty('uptime');
+                        }
+                    }
+                }
                 $routerReachable = true;
             }
         } catch (Exception $e) {

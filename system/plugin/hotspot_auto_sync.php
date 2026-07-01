@@ -17,13 +17,12 @@ register_hook('register_user', 'hotspot_sync_on_register');
  * This runs after $d->save() in register.php
  */
 function hotspot_sync_on_register() {
-    global $d; // $d contains the newly created customer ORM object
-
-    if (!isset($d) || !$d->id) {
-        return;
-    }
-
-    hotspot_create_user_from_phone($d->phonenumber ?: $d->username);
+    // DISABLED: self-registration must NOT grant hotspot access. Auto-creating
+    // a 'default'-profile router user here gave customers free internet without
+    // a voucher (business loss). Access is now provisioned only on voucher
+    // redemption / recharge. Kept as a no-op so the register_user hook and the
+    // manual admin sync helpers below remain available.
+    return;
 }
 
 /**
