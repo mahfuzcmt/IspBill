@@ -19,6 +19,10 @@
 													<option value="Hotspot" {if isset($service_type)  && $service_type eq 'Hotspot'}selected{/if}>Hotspot</option>
 													<option value="All"     {if isset($service_type)  && $service_type eq 'All'}selected{/if}>All types</option>
 												</select>
+												<select name="sort" class="form-control" style="max-width:150px" title="Sort order">
+													<option value=""           {if !isset($sort) || $sort eq ''}selected{/if}>Sort: Expiry</option>
+													<option value="last_usage" {if isset($sort) && $sort eq 'last_usage'}selected{/if}>Sort: Last usage</option>
+												</select>
 												<div class="input-group-btn">
 													<button class="btn btn-success">{$_L['Search']}</button>
 												</div>
@@ -43,6 +47,7 @@
                                                     <th>Plan</th>
                                                     <th>Expiration</th>
                                                     <th>Status</th>
+                                                    <th>Last Seen</th>
                                                     <th>{$_L['Recharge']}</th>
                                                     <th>{$_L['Manage']}</th>
                                                 </tr>
@@ -104,6 +109,13 @@
                                                             {if isset($routerReachable) && $routerReachable}
                                                                 <br><small class="text-muted">not on router</small>
                                                             {/if}
+                                                        {/if}
+                                                    </td>
+                                                    <td align="center">
+                                                        {if $ds['last_seen']}
+                                                            <small title="Last minute this customer had traffic (local time)">{$ds['last_seen']}</small>
+                                                        {else}
+                                                            <span class="text-muted">&mdash;</span>
                                                         {/if}
                                                     </td>
                                                     <td align="center">

@@ -31,6 +31,14 @@ switch ($action) {
         }
         // The actual DB value stored in tbl_user_recharges.type is 'PPPoE' or 'Hotspot' (case-sensitive).
         if (!in_array($serviceType, ['PPPoE', 'Hotspot', 'All'])) $serviceType = 'PPPoE';
+        // Sort option: 'last_usage' orders by the most recent traffic sample
+        // (last time the customer was actually online) first. Empty = default
+        // (soonest expiry first). Accepts POST (search form) or GET (pagination).
+        $sort = _post('sort');
+        if ($sort === '' || $sort === null) {
+            $sort = isset($_GET['sort']) ? trim((string)$_GET['sort']) : '';
+        }
+        if (!in_array($sort, ['last_usage'])) $sort = '';
         run_hook('list_customers'); #HOOK
 
         // Hotspot customers may have self-registered and exist as a hotspot user
@@ -98,6 +106,7 @@ switch ($action) {
         $linkBase   = U . $routes[0] . '/' . $routes[1] . '/';
         $contents   = '<ul class="pagination pagination-sm">';
         $stq        = '&service_type=' . urlencode($serviceType);
+        if ($sort !== '') $stq .= '&sort=' . urlencode($sort);
         for ($i = 1; $i <= $lastpage; $i++) {
             $contents .= $i == $page
                 ? "<li class='active'><a href='javascript:void(0);'>$i</a></li>"
@@ -109,6 +118,7 @@ switch ($action) {
             'page' => $page, 'lastpage' => $lastpage, 'contents' => $contents,
         ];
         $ui->assign('service_type', $serviceType);
+        $ui->assign('sort', $sort);
 
         // Latest recharge per customer (LEFT JOIN); sort by expiration ASC so
         // customers expiring soonest float to the top, NULLs (no plan) last.
@@ -116,6 +126,18 @@ switch ($action) {
         $limit  = isset($paginator['limit'])      ? (int) $paginator['limit']      : 10;
         $offset = isset($paginator['startpoint']) ? (int) $paginator['startpoint'] : 0;
         if ($limit < 1) $limit = 10;
+        // tbl_traffic_samples.ts is stored in DB time (UTC on this deployment);
+        // convert it to the app's configured local offset for display. date('P')
+        // yields a safe fixed "+HH:MM" string (not user input), so interpolating
+        // it is injection-safe. Ordering still uses the raw ts (relative order is
+        // timezone-independent).
+        $tzOffset = date('P');
+        // Sort clause: by last usage (most recent traffic sample) or by expiry.
+        if ($sort === 'last_usage') {
+            $orderSql = 'ORDER BY (ts.last_seen IS NULL) ASC, ts.last_seen DESC, c.id DESC';
+        } else {
+            $orderSql = 'ORDER BY (r.expiration IS NULL) ASC, r.expiration ASC, c.id DESC';
+        }
         $sql = "
             SELECT
                 c.id, c.username, c.fullname, c.phonenumber, c.email, c.created_at,
@@ -129,7 +151,8 @@ switch ($action) {
                     WHEN r.expiration < CURDATE()  THEN 'Expired'
                     ELSE 'Active'
                 END             AS computed_status,
-                DATEDIFF(r.expiration, CURDATE()) AS days_left
+                DATEDIFF(r.expiration, CURDATE()) AS days_left,
+                CONVERT_TZ(ts.last_seen, '+00:00', '$tzOffset') AS last_seen
             FROM tbl_customers c
             LEFT JOIN (
                 SELECT customer_id, MAX(id) AS last_id
@@ -137,8 +160,13 @@ switch ($action) {
                 GROUP BY customer_id
             ) lr ON lr.customer_id = c.id
             LEFT JOIN tbl_user_recharges r ON r.id = lr.last_id
+            LEFT JOIN (
+                SELECT username, MAX(ts) AS last_seen
+                FROM tbl_traffic_samples
+                GROUP BY username
+            ) ts ON ts.username = c.username
             $whereSql
-            ORDER BY (r.expiration IS NULL) ASC, r.expiration ASC, c.id DESC
+            $orderSql
             LIMIT $limit OFFSET $offset
         ";
         $d = ORM::for_table('tbl_customers')->raw_query($sql, $params)->find_many();
