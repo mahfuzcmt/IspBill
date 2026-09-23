@@ -64,8 +64,56 @@
                 {/if}
 
                 <p class="text-muted small mt20">
-                    Polled every minute; live point refreshes every 3 seconds. Retention 7 days.
+                    Polled every minute; the live point is the average since a sample at least 30 seconds old. Samples are kept 7 days.
                 </p>
+
+                <hr>
+                <h4>Usage — last 30 days</h4>
+                <div class="row mb20">
+                    <div class="col-md-4"><strong>WAN ↓ download</strong><br>
+                        <span style="font-size:1.4em">{($usageTotals.wan_rx/1000000000)|string_format:"%.1f"} GB</span>
+                    </div>
+                    <div class="col-md-4"><strong>WAN ↑ upload</strong><br>
+                        <span style="font-size:1.4em">{($usageTotals.wan_tx/1000000000)|string_format:"%.1f"} GB</span>
+                    </div>
+                    <div class="col-md-4"><strong>Customers (down + up)</strong><br>
+                        <span style="font-size:1.4em">{($usageTotals.users/1000000000)|string_format:"%.1f"} GB</span>
+                    </div>
+                </div>
+                {if $usageTotals.first_day}
+                <p class="text-muted small">Customer totals since {$usageTotals.first_day}. Daily totals are kept permanently; WAN totals start from the day this was enabled.</p>
+                {/if}
+
+                <div class="row">
+                    <div class="col-md-5">
+                        <table class="table table-condensed table-striped">
+                            <thead><tr><th>Day</th><th class="text-right">WAN ↓</th><th class="text-right">WAN ↑</th></tr></thead>
+                            <tbody>
+                            {foreach $wanDaily as $d}
+                                <tr><td>{$d.day}</td>
+                                    <td class="text-right">{($d.rx/1000000000)|string_format:"%.1f"} GB</td>
+                                    <td class="text-right">{($d.tx/1000000000)|string_format:"%.1f"} GB</td></tr>
+                            {foreachelse}
+                                <tr><td colspan="3" class="text-muted">No WAN totals yet.</td></tr>
+                            {/foreach}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-7">
+                        <table class="table table-condensed table-striped">
+                            <thead><tr><th>Top customers</th><th class="text-right">Download</th><th class="text-right">Upload</th></tr></thead>
+                            <tbody>
+                            {foreach $topUsers as $u}
+                                <tr><td>{$u.username|escape:'html'}</td>
+                                    <td class="text-right">{($u.download/1000000000)|string_format:"%.1f"} GB</td>
+                                    <td class="text-right">{($u.upload/1000000000)|string_format:"%.1f"} GB</td></tr>
+                            {foreachelse}
+                                <tr><td colspan="3" class="text-muted">No customer totals yet.</td></tr>
+                            {/foreach}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

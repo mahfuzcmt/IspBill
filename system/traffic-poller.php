@@ -9,10 +9,15 @@
  *      <pppoe-USER> interface. Written to tbl_traffic_samples.
  *
  *   2. WAN interface stats (rx-bps, tx-bps, rx-error, tx-error, drops)
- *      from /interface/monitor-traffic + /interface/print. Written to
- *      tbl_wan_samples. Gives the 24h view of uplink utilisation.
+ *      from /interface/print byte counters. Written to tbl_wan_samples.
+ *      Gives the 24h view of uplink utilisation.
  *
- * Retention: rows older than 7 days are deleted on each run.
+ *   3. Daily usage totals: every byte delta above is added to
+ *      tbl_usage_daily (per customer) and tbl_wan_usage_daily (per WAN
+ *      interface), keyed by the app-timezone date. These are kept forever
+ *      and give monthly usage figures.
+ *
+ * Retention: sample rows older than 7 days are deleted on each run.
  */
 error_reporting(E_ERROR | E_PARSE);
 spl_autoload_register(function ($c) {
@@ -25,9 +30,22 @@ require '/var/www/html/config.php';
 $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_password,
     [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
+// Daily totals are bucketed by the app's timezone, not the container's UTC.
+$tz = $pdo->query("SELECT value FROM tbl_appconfig WHERE setting = 'timezone'")->fetchColumn();
+if ($tz) date_default_timezone_set($tz);
+$today = date('Y-m-d');
+
+// Bytes transferred since the previous reading of a cumulative counter. A
+// counter lower than before was reset (new PPPoE session, router reboot), so
+// everything it holds now is new traffic.
+function counterDelta($now, $prev) {
+    return $now >= $prev ? $now - $prev : $now;
+}
+
 $start = microtime(true);
 $inserts = 0;
 $errors  = [];
+$usageByUser = [];
 
 try {
     $rt = $pdo->query("SELECT * FROM tbl_routers WHERE enabled=1 LIMIT 1")->fetch(PDO::FETCH_ASSOC);
@@ -83,8 +101,9 @@ try {
                 $dt = $start - (int) $prev['t'];
                 if ($dt > 0) {
                     // bytes_in = upload (from customer), bytes_out = download
-                    $dIn  = $s['bytes_in']  - (int) $prev['bytes_in'];
-                    $dOut = $s['bytes_out'] - (int) $prev['bytes_out'];
+                    $dIn  = counterDelta($s['bytes_in'],  (int) $prev['bytes_in']);
+                    $dOut = counterDelta($s['bytes_out'], (int) $prev['bytes_out']);
+                    $usageByUser[$user] = [$dIn, $dOut];
                     // Rate = per-minute byte-delta average (bits/sec). rate_in/out
                     // start at 0, so this simply takes the delta-derived rate.
                     if ($dIn  > 0) $dataByUser[$user]['rate_in']  = (int) ($dIn  * 8 / $dt);
@@ -152,8 +171,9 @@ try {
                 if ($prev = $prevStmt->fetch(PDO::FETCH_ASSOC)) {
                     $dt = $start - (int) $prev['t'];
                     if ($dt > 0) {
-                        $dIn  = $bin  - (int) $prev['bytes_in'];
-                        $dOut = $bout - (int) $prev['bytes_out'];
+                        $dIn  = counterDelta($bin,  (int) $prev['bytes_in']);
+                        $dOut = counterDelta($bout, (int) $prev['bytes_out']);
+                        $usageByUser[$name] = [$dIn, $dOut];
                         if ($dIn  > 0) $rateIn  = (int) ($dIn  * 8 / $dt);
                         if ($dOut > 0) $rateOut = (int) ($dOut * 8 / $dt);
                     }
@@ -225,44 +245,70 @@ try {
         return null;
     };
 
-    // 3a. Current rx/tx bps from a 1-second byte-counter delta. monitor-traffic
-    //     'once' under-reports badly over the API (~5% of real), so derive the
-    //     rate from counters instead — same approach as the PPPoE samples.
+    // 3a. Rate = byte-counter delta since the previous WAN sample, divided by
+    //     the time between them — the same per-minute average as the PPPoE
+    //     samples. A 1-second delta is not usable: this router's counters
+    //     advance in bursts, so 1s windows read up to ~1 Gbps on a Starlink
+    //     uplink and inflated the stored history ~4x.
     $wanRxBps = 0; $wanTxBps = 0; $wanRxPps = 0; $wanTxPps = 0;
     $wanRxError = 0; $wanTxError = 0; $wanRxDrop = 0; $wanTxDrop = 0;
+    $wanRxDelta = 0; $wanTxDelta = 0;
+    $s = null;
     try {
-        // Divide by the ACTUAL elapsed time between the two reads, not an
-        // assumed 1.0s — the counter reads take API round-trip time, so
-        // treating the delta as exactly 1s inflates the rate. Same approach as
-        // the per-customer sampling above ($dt).
-        $s1 = $wanRead($wanClient);
-        $t1 = microtime(true);
-        usleep(1000000);
-        $s2 = $wanRead($wanClient);
-        $t2 = microtime(true);
-        $dt = $t2 - $t1;
-        if ($s1 && $s2 && $dt > 0) {
-            $wanRxBps = max(0, (int) round(($s2['rb'] - $s1['rb']) * 8 / $dt));
-            $wanTxBps = max(0, (int) round(($s2['tb'] - $s1['tb']) * 8 / $dt));
-            $wanRxPps = max(0, (int) round(($s2['rp'] - $s1['rp']) / $dt));
-            $wanTxPps = max(0, (int) round(($s2['tp'] - $s1['tp']) / $dt));
+        $s = $wanRead($wanClient);
+        if ($s) {
+            $prevStmt = $pdo->prepare(
+                "SELECT rx_bytes, tx_bytes, rx_packets, tx_packets, UNIX_TIMESTAMP(ts) AS t
+                 FROM tbl_wan_samples WHERE interface = ? AND rx_bytes > 0 ORDER BY id DESC LIMIT 1"
+            );
+            $prevStmt->execute([$wanIface]);
+            if ($prev = $prevStmt->fetch(PDO::FETCH_ASSOC)) {
+                $dt = $start - (int) $prev['t'];
+                if ($dt > 0) {
+                    $wanRxDelta = counterDelta($s['rb'], (int) $prev['rx_bytes']);
+                    $wanTxDelta = counterDelta($s['tb'], (int) $prev['tx_bytes']);
+                    $wanRxBps = (int) round($wanRxDelta * 8 / $dt);
+                    $wanTxBps = (int) round($wanTxDelta * 8 / $dt);
+                    $wanRxPps = (int) round(counterDelta($s['rp'], (int) $prev['rx_packets']) / $dt);
+                    $wanTxPps = (int) round(counterDelta($s['tp'], (int) $prev['tx_packets']) / $dt);
+                }
+            }
             // 3b. Cumulative error / drop counters (latest snapshot).
-            $wanRxError = $s2['re']; $wanTxError = $s2['te'];
-            $wanRxDrop  = $s2['rd']; $wanTxDrop  = $s2['td'];
+            $wanRxError = $s['re']; $wanTxError = $s['te'];
+            $wanRxDrop  = $s['rd']; $wanTxDrop  = $s['td'];
         }
     } catch (Throwable $e) { $errors[] = 'wan-monitor: ' . $e->getMessage(); }
 
     $pdo->prepare(
-        "INSERT INTO tbl_wan_samples (interface, rx_bps, tx_bps, rx_pps, tx_pps, rx_error, tx_error, rx_drop, tx_drop)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO tbl_wan_samples (interface, rx_bps, tx_bps, rx_pps, tx_pps, rx_error, tx_error, rx_drop, tx_drop,
+                                      rx_bytes, tx_bytes, rx_packets, tx_packets)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )->execute([
         $wanIface, $wanRxBps, $wanTxBps, $wanRxPps, $wanTxPps,
         $wanRxError, $wanTxError, $wanRxDrop, $wanTxDrop,
+        $s ? $s['rb'] : 0, $s ? $s['tb'] : 0, $s ? $s['rp'] : 0, $s ? $s['tp'] : 0,
     ]);
     $inserts++;
 
     // -----------------------------------------------------------------
-    // Retention: 7 days
+    // 4. Daily usage totals
+    // -----------------------------------------------------------------
+    $userDaily = $pdo->prepare(
+        "INSERT INTO tbl_usage_daily (day, username, bytes_in, bytes_out) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE bytes_in = bytes_in + VALUES(bytes_in), bytes_out = bytes_out + VALUES(bytes_out)"
+    );
+    foreach ($usageByUser as $user => $d) {
+        if ($d[0] || $d[1]) $userDaily->execute([$today, $user, $d[0], $d[1]]);
+    }
+    if ($wanRxDelta || $wanTxDelta) {
+        $pdo->prepare(
+            "INSERT INTO tbl_wan_usage_daily (day, interface, rx_bytes, tx_bytes) VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE rx_bytes = rx_bytes + VALUES(rx_bytes), tx_bytes = tx_bytes + VALUES(tx_bytes)"
+        )->execute([$today, $wanIface, $wanRxDelta, $wanTxDelta]);
+    }
+
+    // -----------------------------------------------------------------
+    // Retention: 7 days (samples only; daily totals are kept)
     // -----------------------------------------------------------------
     $pruned1 = $pdo->exec("DELETE FROM tbl_traffic_samples WHERE ts < NOW() - INTERVAL 7 DAY");
     $pruned2 = $pdo->exec("DELETE FROM tbl_wan_samples     WHERE ts < NOW() - INTERVAL 7 DAY");

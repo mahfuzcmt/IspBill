@@ -49,8 +49,8 @@ if ($action === 'data') {
         if ($rt) {
             $client = Mikrotik::tryClient($rt['ip_address'], $rt['username'], $rt['password']);
             $name = $iface ?: ($GLOBALS['config']['wan_interface'] ?? '') ?: 'ether2-Starlink';
-            // Derive the current rate from a 1s byte-counter delta. monitor-traffic
-            // 'once' under-reports heavily over the API, so read counters instead.
+            // Derive the current rate from byte counters. monitor-traffic
+            // 'once' under-reports heavily over the API.
             $readBytes = function ($cl) use ($name) {
                 $q = new RouterOS\Request('/interface/print');
                 $q->setArgument('stats', '');
@@ -63,22 +63,21 @@ if ($action === 'data') {
                 return null;
             };
             if ($client) try {
-                // Divide by the ACTUAL elapsed time between the two counter
-                // reads (not an assumed 1.0s) — the reads themselves take API
-                // round-trip time, so treating the delta as exactly 1s inflates
-                // the rate. Matches the per-customer sampling in traffic-poller.
-                $s1 = $readBytes($client);
-                $t1 = microtime(true);
-                usleep(1000000);
-                $s2 = $readBytes($client);
-                $t2 = microtime(true);
-                $dt = $t2 - $t1;
-                if ($s1 && $s2 && $dt > 0) {
+                // Average since a stored sample at least 30s old. The router's
+                // counters advance in bursts, so a 1s delta reads wildly high
+                // (up to ~1 Gbps on this uplink); a 30s+ window is stable.
+                $ref = ORM::for_table('tbl_wan_samples')->raw_query(
+                    "SELECT rx_bytes, tx_bytes, UNIX_TIMESTAMP(ts) t FROM tbl_wan_samples
+                     WHERE interface = ? AND rx_bytes > 0 AND ts <= NOW() - INTERVAL 30 SECOND
+                     ORDER BY id DESC LIMIT 1", [$name])->find_array();
+                $now = $readBytes($client);
+                $dt = $ref ? microtime(true) - (int)$ref[0]['t'] : 0;
+                if ($now && $dt > 0 && $now['rb'] >= $ref[0]['rx_bytes'] && $now['tb'] >= $ref[0]['tx_bytes']) {
                     $out['live'] = [
                         'ts'    => time() * 1000,
                         'iface' => $name,
-                        'rxBps' => max(0, (int) round(($s2['rb'] - $s1['rb']) * 8 / $dt)),
-                        'txBps' => max(0, (int) round(($s2['tb'] - $s1['tb']) * 8 / $dt)),
+                        'rxBps' => (int) round(($now['rb'] - $ref[0]['rx_bytes']) * 8 / $dt),
+                        'txBps' => (int) round(($now['tb'] - $ref[0]['tx_bytes']) * 8 / $dt),
                     ];
                 }
             } catch (Throwable $e) {}
@@ -99,6 +98,27 @@ $lastErrors = ORM::for_table('tbl_wan_samples')
     ->raw_query("SELECT interface, rx_error, tx_error, rx_drop, tx_drop, ts
                  FROM tbl_wan_samples ORDER BY ts DESC LIMIT 1")
     ->find_array();
+// Usage over the last 30 days from the daily totals the poller keeps.
+$since = date('Y-m-d', strtotime('-29 days'));
+$wanDaily = ORM::for_table('tbl_wan_usage_daily')
+    ->raw_query("SELECT day, SUM(rx_bytes) rx, SUM(tx_bytes) tx FROM tbl_wan_usage_daily
+                 WHERE day >= ? GROUP BY day ORDER BY day DESC", [$since])
+    ->find_array();
+$topUsers = ORM::for_table('tbl_usage_daily')
+    ->raw_query("SELECT username, SUM(bytes_out) download, SUM(bytes_in) upload FROM tbl_usage_daily
+                 WHERE day >= ? GROUP BY username
+                 ORDER BY SUM(bytes_out + bytes_in) DESC", [$since])
+    ->find_array();
+$usageTotals = ['wan_rx' => 0, 'wan_tx' => 0, 'users' => 0, 'first_day' => null];
+foreach ($wanDaily as $d) { $usageTotals['wan_rx'] += $d['rx']; $usageTotals['wan_tx'] += $d['tx']; }
+foreach ($topUsers as $u) { $usageTotals['users'] += $u['download'] + $u['upload']; }
+$first = ORM::for_table('tbl_usage_daily')
+    ->raw_query("SELECT MIN(day) d FROM tbl_usage_daily WHERE day >= ?", [$since])->find_array();
+$usageTotals['first_day'] = $first[0]['d'] ?? null;
+
 $ui->assign('ifaces', $ifaces);
 $ui->assign('lastErrors', $lastErrors[0] ?? null);
+$ui->assign('wanDaily', $wanDaily);
+$ui->assign('topUsers', array_slice($topUsers, 0, 20));
+$ui->assign('usageTotals', $usageTotals);
 $ui->display('wan.tpl');
