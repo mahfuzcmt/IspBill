@@ -180,7 +180,7 @@ UPDATE tbl_routers SET ip_address='10.99.0.2', username='admin', password='<MT_A
 The HTML files under `tnr-hotspot-login-v14-en-bn/` on the Mikrotik were rebranded TNR→NetPulse in-place (FTP upload). 19 files, 25→0 TNR mentions remaining.
 
 ### Bandwidth / queue stats
-The cron `traffic-poller.php` polls `/queue/simple/print stats=yes` every minute and writes one row per active PPPoE session to `tbl_traffic_samples`. 7-day retention.
+`traffic-poller.php` runs every minute from the `phpnuxbill-cron` container loop (not from host crontab — running it from both double-writes samples). It reads the `<pppoe-USER>` and WAN interface byte counters and writes one row per session to `tbl_traffic_samples` and one WAN row to `tbl_wan_samples`, with rates computed from the byte delta since the previous sample (a 1-second delta reads up to ~1 Gbps on this router because its counters advance in bursts). Samples: 7-day retention. Each run's byte deltas are also added to `tbl_usage_daily` / `tbl_wan_usage_daily` (kept permanently) for monthly usage; the WAN page shows the last 30 days.
 
 ### DNS query logging (BTRC) — deployed 2026-05-18
 
@@ -254,6 +254,29 @@ CREATE TABLE tbl_traffic_samples (
     INDEX idx_user_ts (username, ts),
     INDEX idx_ts (ts)
 ) ENGINE=InnoDB;
+
+-- Raw WAN counters, so rates are byte deltas between samples (2026-09-23)
+ALTER TABLE tbl_wan_samples
+    ADD COLUMN rx_bytes   BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    ADD COLUMN tx_bytes   BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    ADD COLUMN rx_packets BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    ADD COLUMN tx_packets BIGINT UNSIGNED NOT NULL DEFAULT 0;
+
+-- Daily usage totals, day in the app timezone (2026-09-23)
+CREATE TABLE tbl_usage_daily (
+    day DATE NOT NULL,
+    username VARCHAR(64) NOT NULL,
+    bytes_in BIGINT UNSIGNED NOT NULL DEFAULT 0,   -- upload from customer
+    bytes_out BIGINT UNSIGNED NOT NULL DEFAULT 0,  -- download to customer
+    PRIMARY KEY (day, username)
+) ENGINE=InnoDB;
+CREATE TABLE tbl_wan_usage_daily (
+    day DATE NOT NULL,
+    interface VARCHAR(64) NOT NULL,
+    rx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    tx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, interface)
+) ENGINE=InnoDB;
 ```
 
 ### `tbl_appconfig` rows seeded
@@ -285,11 +308,12 @@ UPDATE tbl_appconfig SET value='NetPulse' WHERE setting='CompanyName';
 # PHPNuxBill — auto-expire recharges + suspend PPPoE on Mikrotik
 0 * * * * docker exec phpnuxbill-app sh -c "cd /var/www/html/system && php cron.php" \
     >> /var/log/phpnuxbill-cron.log 2>&1
-
-# PHPNuxBill traffic poller — writes /queue/simple stats to tbl_traffic_samples
-* * * * * docker exec phpnuxbill-app php /var/www/html/system/traffic-poller.php \
-    >> /var/log/phpnuxbill-traffic.log 2>&1
 ```
+
+The traffic poller is NOT in host crontab: the `phpnuxbill-cron` container
+runs it every minute (`docker logs phpnuxbill-cron`). A host crontab entry
+for it was removed on 2026-09-23 because the two schedules double-wrote
+samples.
 
 ## 7. OLT — current blocker
 
