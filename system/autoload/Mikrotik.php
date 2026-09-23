@@ -76,14 +76,22 @@ class Mikrotik
     /**
      * Like getClient(), but returns null on failure instead of die()-ing.
      * Used by failover paths and the Remote Login console.
+     * On failure the reason is kept in self::$lastError.
      */
+    public static $lastError = '';
+
     public static function tryClient($ip, $user, $pass)
     {
-        if (empty($ip) || empty($user)) return null;
+        self::$lastError = '';
+        if (empty($ip) || empty($user)) {
+            self::$lastError = 'IP address or username is empty';
+            return null;
+        }
         try {
             $iport = explode(":", $ip);
-            return new RouterOS\Client($iport[0], $user, $pass, ($iport[1]) ? $iport[1] : null);
+            return new RouterOS\Client($iport[0], $user, $pass, isset($iport[1]) ? $iport[1] : null);
         } catch (Exception $e) {
+            self::$lastError = $e->getMessage();
             return null;
         }
     }
@@ -123,7 +131,7 @@ class Mikrotik
             if ($client) {
                 return [$client, $label, null];
             }
-            $errors[] = "$label ({$cfg['ip']})";
+            $errors[] = "$label ({$cfg['ip']}): " . self::$lastError;
             if ($target === 'primary' || $target === 'secondary') {
                 // explicit target requested — do not fall back
                 break;

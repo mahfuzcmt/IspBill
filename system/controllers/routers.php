@@ -126,7 +126,7 @@ switch ($action) {
 
         if(!$config['radius_mode']){
             if (!Mikrotik::tryClient($ip_address,$username,$password)) {
-                $msg .= 'Cannot connect to router at ' . htmlspecialchars($ip_address) . ' with the supplied credentials.<br>';
+                $msg .= 'Cannot connect to router at ' . htmlspecialchars($ip_address) . ' with the supplied credentials: ' . htmlspecialchars(Mikrotik::$lastError) . '<br>';
             }
         }
 
@@ -204,7 +204,7 @@ switch ($action) {
 
         if(!$config['radius_mode']){
             if (!Mikrotik::tryClient($ip_address,$username,$password)) {
-                $msg .= 'Cannot connect to router at ' . htmlspecialchars($ip_address) . ' with the supplied credentials.<br>';
+                $msg .= 'Cannot connect to router at ' . htmlspecialchars($ip_address) . ' with the supplied credentials: ' . htmlspecialchars(Mikrotik::$lastError) . '<br>';
             }
         }
 
@@ -267,7 +267,7 @@ switch ($action) {
 
         list($client, $used, $err) = Mikrotik::getClientForRouter($d->as_array(), $target);
         if (!$client) {
-            r2(U . 'routers/list', 'e', $err);
+            r2(U . 'routers/list', 'e', htmlspecialchars($err));
         }
 
         // Plans on the secondary endpoint get tagged with "::secondary".
@@ -381,7 +381,7 @@ switch ($action) {
 
         list($client, $used, $err) = Mikrotik::getClientForRouter($d->as_array(), $target);
         if (!$client) {
-            r2(U . 'routers/list', 'e', $err);
+            r2(U . 'routers/list', 'e', htmlspecialchars($err));
         }
 
         $identity = '';
