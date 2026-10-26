@@ -1353,20 +1353,42 @@ switch ($action) {
         // via ?status=due|paid|all. Default = due (most useful — admin wants to chase).
         $statusFilter = $_GET['status'] ?? 'due';
         if (!in_array($statusFilter, ['due','paid','all'], true)) $statusFilter = 'due';
+        // ?group=customer collapses the list to one row per customer with summed amounts.
+        $groupBy = (($_GET['group'] ?? '') === 'customer') ? 'customer' : '';
 
-        $sql = "
-            SELECT cs.id, cs.customer_id, cs.username, cs.plan_name, cs.bill_month,
-                   cs.amount, cs.status, cs.created_at, cs.paid_at, cs.notes,
-                   c.fullname, c.phonenumber
-            FROM tbl_credit_sales cs
-            LEFT JOIN tbl_customers c ON c.id = cs.customer_id
-        ";
+        $where = '';
         $params = [];
         if ($statusFilter !== 'all') {
-            $sql .= " WHERE cs.status = ?";
+            $where = " WHERE cs.status = ?";
             $params[] = $statusFilter;
         }
-        $sql .= " ORDER BY cs.status='due' DESC, cs.created_at DESC LIMIT 500";
+
+        if ($groupBy === 'customer') {
+            $sql = "
+                SELECT cs.customer_id,
+                       MAX(c.fullname) AS fullname, MAX(c.phonenumber) AS phonenumber,
+                       GROUP_CONCAT(DISTINCT cs.username ORDER BY cs.username SEPARATOR ', ') AS usernames,
+                       COUNT(*) AS bills,
+                       SUM(CASE WHEN cs.status='due' THEN 1 ELSE 0 END) AS due_bills,
+                       COALESCE(SUM(CASE WHEN cs.status='due'  THEN cs.amount END),0) AS due_amount,
+                       COALESCE(SUM(CASE WHEN cs.status='paid' THEN cs.amount END),0) AS paid_amount,
+                       MIN(CASE WHEN cs.status='due' THEN cs.bill_month END) AS oldest_due_month,
+                       MAX(cs.created_at) AS last_created
+                FROM tbl_credit_sales cs
+                LEFT JOIN tbl_customers c ON c.id = cs.customer_id
+            " . $where . "
+                GROUP BY cs.customer_id
+                ORDER BY due_amount DESC, fullname ASC
+                LIMIT 500";
+        } else {
+            $sql = "
+                SELECT cs.id, cs.customer_id, cs.username, cs.plan_name, cs.bill_month,
+                       cs.amount, cs.status, cs.created_at, cs.paid_at, cs.notes,
+                       c.fullname, c.phonenumber
+                FROM tbl_credit_sales cs
+                LEFT JOIN tbl_customers c ON c.id = cs.customer_id
+            " . $where . " ORDER BY cs.status='due' DESC, cs.created_at DESC LIMIT 500";
+        }
         $rows = ORM::for_table('tbl_credit_sales')->raw_query($sql, $params)->find_array();
 
         // Totals across the current filter view.
@@ -1377,6 +1399,7 @@ switch ($action) {
 
         $ui->assign('rows', $rows);
         $ui->assign('statusFilter', $statusFilter);
+        $ui->assign('groupBy', $groupBy);
         $ui->assign('totalDue',  $totalDue ? (float) $totalDue['t']  : 0);
         $ui->assign('totalPaid', $totalPaid ? (float) $totalPaid['t'] : 0);
         $ui->display('customers-credits.tpl');
