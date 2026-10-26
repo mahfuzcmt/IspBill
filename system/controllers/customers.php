@@ -253,13 +253,11 @@ switch ($action) {
         }
 
         // Router Web UI URL — admin-configurable via tbl_appconfig.router_web_url.
-        // Falls back to APP_URL with port 8090 if unset (matching the current proxy setup).
+        // Falls back to APP_URL's host on port 8090 if unset (matching the current proxy setup).
+        // The 8090 proxy is plain HTTP, so don't inherit https from APP_URL.
         $routerWebUrl = isset($config['router_web_url']) ? trim($config['router_web_url']) : '';
         if ($routerWebUrl === '') {
-            $routerWebUrl = preg_replace('#:\d+(/.*)?$#', ':8090/', APP_URL);
-            if ($routerWebUrl === APP_URL) {
-                $routerWebUrl = rtrim(APP_URL, '/') . ':8090/';
-            }
+            $routerWebUrl = 'http://' . (parse_url(APP_URL, PHP_URL_HOST) ?: 'localhost') . ':8090/';
         }
 
         $ui->assign('d', $d);
