@@ -18,7 +18,7 @@
 #     DRY_RUN=1 ./deploy.sh           # show what would change, don't apply
 #
 # Env:
-#     DEPLOY_HOST   default: root@103.187.22.131
+#     DEPLOY_HOST   default: root@103.159.37.145
 #     DEPLOY_DIR    default: /opt/phpnuxbill
 #     DRY_RUN       any truthy value runs rsync --dry-run and skips restart
 #
@@ -33,7 +33,7 @@
 
 set -euo pipefail
 
-HOST="${DEPLOY_HOST:-root@103.187.22.131}"
+HOST="${DEPLOY_HOST:-root@103.159.37.145}"
 DIR="${DEPLOY_DIR:-/opt/phpnuxbill}"
 DRY="${DRY_RUN:-}"
 
@@ -85,6 +85,6 @@ echo "==> Restarting nuxbill-app + nuxbill-cron"
 ssh "$HOST" "cd $DIR && docker compose up -d nuxbill-app nuxbill-cron && docker ps --filter name=phpnuxbill --format 'table {{.Names}}\t{{.Status}}'"
 
 echo
-echo "==> Done. Verify: http://103.187.22.131:8081/"
+echo "==> Done. Verify: http://103.159.37.145:8081/"
 echo "    Tail cron logs:    ssh $HOST docker logs -f phpnuxbill-cron"
 echo "    Tail app logs:     ssh $HOST docker logs -f phpnuxbill-app"
