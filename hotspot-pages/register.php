@@ -9,7 +9,7 @@
  */
 
 // === CONFIGURATION ===
-$ROUTER_IP = '103.187.22.131';
+$ROUTER_HOST = 'isp.sodaionline.com';
 $ROUTER_PORT = '8090';
 $ROUTER_USER = 'admin';
 $ROUTER_PASS = '889946aa';
@@ -54,7 +54,7 @@ if (strlen($name) < 2) {
 $password = substr($phone, -6);
 
 // Check if user already exists
-$checkUrl = "http://{$ROUTER_IP}:{$ROUTER_PORT}/rest/ip/hotspot/user?name=" . urlencode($phone);
+$checkUrl = "http://{$ROUTER_HOST}:{$ROUTER_PORT}/rest/ip/hotspot/user?name=" . urlencode($phone);
 $ch = curl_init($checkUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_USERPWD, "{$ROUTER_USER}:{$ROUTER_PASS}");

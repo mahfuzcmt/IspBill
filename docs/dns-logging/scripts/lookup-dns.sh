@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # lookup-dns.sh — pull DNS query history for a customer or IP.
-# Run on the VPS (root@103.187.22.131) where dnsmasq-resolver runs.
+# Run on the VPS (root@isp.sodaionline.com) where dnsmasq-resolver runs.
 #
 # Usage:
 #   ./lookup-dns.sh <username|ip> [hours-back]
