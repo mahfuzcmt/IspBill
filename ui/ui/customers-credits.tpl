@@ -9,18 +9,30 @@
 
                 <div class="row" style="margin-bottom:14px">
                     <div class="col-md-6">
+                        {if $groupBy eq 'customer'}{assign var=groupQs value='&group=customer'}{else}{assign var=groupQs value=''}{/if}
                         <div class="btn-group" role="group">
-                            <a href="{$_url}customers/credits&status=due"
+                            <a href="{$_url}customers/credits&status=due{$groupQs}"
                                class="btn btn-{if $statusFilter eq 'due'}warning{else}default{/if}">
                                 Due only
                             </a>
-                            <a href="{$_url}customers/credits&status=paid"
+                            <a href="{$_url}customers/credits&status=paid{$groupQs}"
                                class="btn btn-{if $statusFilter eq 'paid'}success{else}default{/if}">
                                 Paid only
                             </a>
-                            <a href="{$_url}customers/credits&status=all"
+                            <a href="{$_url}customers/credits&status=all{$groupQs}"
                                class="btn btn-{if $statusFilter eq 'all'}primary{else}default{/if}">
                                 All
+                            </a>
+                        </div>
+                        &nbsp;
+                        <div class="btn-group" role="group">
+                            <a href="{$_url}customers/credits&status={$statusFilter}"
+                               class="btn btn-{if $groupBy eq ''}info{else}default{/if}">
+                                <i class="ion ion-navicon"></i> List
+                            </a>
+                            <a href="{$_url}customers/credits&status={$statusFilter}&group=customer"
+                               class="btn btn-{if $groupBy eq 'customer'}info{else}default{/if}">
+                                <i class="ion ion-person-stalker"></i> Group by customer
                             </a>
                         </div>
                     </div>
@@ -35,6 +47,69 @@
                     </div>
                 </div>
 
+                {if $groupBy eq 'customer'}
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped table-condensed">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Phone</th>
+                                <th>Username</th>
+                                <th class="text-right">Bills</th>
+                                <th>Oldest Due Month</th>
+                                <th class="text-right">Due</th>
+                                <th class="text-right">Paid</th>
+                                <th>Last Credit</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {assign var=grpDue value=0}
+                            {assign var=grpPaid value=0}
+                            {foreach $rows as $r}
+                                {assign var=grpDue value=$grpDue+$r['due_amount']}
+                                {assign var=grpPaid value=$grpPaid+$r['paid_amount']}
+                                <tr {if $r['due_amount'] > 0}class="warning"{/if}>
+                                    <td>
+                                        <a href="{$_url}customers/billing/{$r['customer_id']}">
+                                            {if $r['fullname']}{$r['fullname']}{else}<em>(deleted)</em>{/if}
+                                        </a>
+                                    </td>
+                                    <td>{$r['phonenumber']}</td>
+                                    <td><small>{$r['usernames']}</small></td>
+                                    <td class="text-right">
+                                        {$r['bills']}{if $statusFilter eq 'all' && $r['due_bills'] > 0} <small class="text-muted">({$r['due_bills']} due)</small>{/if}
+                                    </td>
+                                    <td>{if $r['oldest_due_month']}{$r['oldest_due_month']}{else}&mdash;{/if}</td>
+                                    <td class="text-right"><strong>{$_c['currency_code']} {$r['due_amount']|number_format:0:".":","}</strong></td>
+                                    <td class="text-right">{$_c['currency_code']} {$r['paid_amount']|number_format:0:".":","}</td>
+                                    <td>{$r['last_created']}</td>
+                                    <td>
+                                        <a href="{$_url}customers/billing/{$r['customer_id']}" class="btn btn-primary btn-xs"
+                                           title="Open this customer's billing page to see and settle each bill">
+                                            <i class="ion ion-card"></i> Billing
+                                        </a>
+                                    </td>
+                                </tr>
+                            {foreachelse}
+                                <tr><td colspan="9" class="text-center text-muted" style="padding:24px">
+                                    No credit sales {if $statusFilter eq 'due'}are currently due{elseif $statusFilter eq 'paid'}have been paid yet{else}exist yet{/if}.
+                                </td></tr>
+                            {/foreach}
+                        </tbody>
+                        {if $rows}
+                        <tfoot>
+                            <tr>
+                                <th colspan="5" class="text-right">Total ({$rows|@count} customers):</th>
+                                <th class="text-right">{$_c['currency_code']} {$grpDue|number_format:0:".":","}</th>
+                                <th class="text-right">{$_c['currency_code']} {$grpPaid|number_format:0:".":","}</th>
+                                <th colspan="2"></th>
+                            </tr>
+                        </tfoot>
+                        {/if}
+                    </table>
+                </div>
+                {else}
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped table-condensed">
                         <thead>
@@ -101,6 +176,7 @@
                         </tbody>
                     </table>
                 </div>
+                {/if}
 
                 <p class="text-muted" style="margin-top:10px">
                     Showing up to 500 rows. Each row's <strong>Customer</strong> name links to that customer's Billing page.
