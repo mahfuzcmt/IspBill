@@ -254,7 +254,7 @@ document.querySelector('#voucher form').onsubmit = function() {
     var spans = document.getElementsByClassName('js-trial-dur');
     if (!spans.length) return;
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'http://103.187.22.131:8081/index.php?_route=api/hotspot-trial-info', true);
+    xhr.open('GET', 'http://103.159.37.145:8081/index.php?_route=api/hotspot-trial-info', true);
     xhr.timeout = 4000;
     xhr.onload = function() {
         try {
@@ -315,7 +315,7 @@ if (trialForm) {
         }
 
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'http://103.187.22.131:8081/index.php?_route=api/hotspot-trial', true);
+        xhr.open('POST', 'http://103.159.37.145:8081/index.php?_route=api/hotspot-trial', true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         xhr.timeout = 4000;
         xhr.onload = startTrial;
@@ -361,7 +361,7 @@ document.getElementById('registerForm').onsubmit = function(e) {
     // Register via the billing system API. This creates the customer in the
     // billing database AND the hotspot user on Mikrotik in a single call.
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', 'http://103.187.22.131:8081/index.php?_route=api/hotspot-register', true);
+    xhr.open('POST', 'http://103.159.37.145:8081/index.php?_route=api/hotspot-register', true);
     // urlencoded keeps this a CORS "simple" request (no preflight) and matches $_POST.
     xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
     xhr.timeout = 15000;
