@@ -644,6 +644,8 @@ switch ($action) {
                         try {
                             Mikrotik::setPpoeUserProfile($client, $username, $plan['name_plan']);
                         } catch (Throwable $e) { $routerWarning .= ' (plan push: ' . $e->getMessage() . ')'; }
+                        // End the running session so the customer reconnects on the new profile at once.
+                        try { Mikrotik::removePpoeActive($client, $username); } catch (Throwable $e) {}
                     }
                     // Status changed — use the "Suspended" PPP profile when status=off.
                     // Suspended profile auto-adds the active client IP to address-list
@@ -1303,6 +1305,8 @@ switch ($action) {
                 // (a) Plan migration → swap profile if changed
                 if ($oldPlanName !== $newPlan['name_plan']) {
                     Mikrotik::setPpoeUserProfile($client, $c['username'], $newPlan['name_plan']);
+                    // End the running session so the customer reconnects on the new profile at once.
+                    try { Mikrotik::removePpoeActive($client, $c['username']); } catch (Throwable $e) {}
                 }
                 // (b) Status change → enable/disable secret
                 if ($oldStatus !== $newStatus) {
