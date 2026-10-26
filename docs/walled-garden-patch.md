@@ -44,7 +44,7 @@ and check before continuing. **Test against a single test address first**
 ### Step 0 — pre-flight on the VPS
 
 ```bash
-ssh root@103.187.22.131
+ssh root@isp.sodaionline.com
 
 # Confirm 10.99.0.1 is up on wg0
 ip -br addr show wg0
@@ -68,8 +68,8 @@ cp /opt/phpnuxbill/docker-compose.yml      /opt/phpnuxbill/docker-compose.yml.ba
 ./deploy.sh                     # gets the IspBill template + notice.php changes live
 
 # Then upload the walled-garden artifacts manually (they're not auto-deployed):
-rsync -avz docs/walled-garden/dnsmasq/         root@103.187.22.131:/opt/phpnuxbill/dnsmasq/
-rsync -avz docs/walled-garden/router-proxy/    root@103.187.22.131:/opt/phpnuxbill/router-proxy/
+rsync -avz docs/walled-garden/dnsmasq/         root@isp.sodaionline.com:/opt/phpnuxbill/dnsmasq/
+rsync -avz docs/walled-garden/router-proxy/    root@isp.sodaionline.com:/opt/phpnuxbill/router-proxy/
 ```
 
 ### Step 2 — splice dnsmasq into docker-compose.yml
@@ -190,7 +190,7 @@ ssh admin@10.99.0.2
 /ip firewall nat remove [find comment="NetPulse-expired-dns-tcp"]
 
 # 2. nginx vhost
-ssh root@103.187.22.131
+ssh root@isp.sodaionline.com
 cd /opt/phpnuxbill/router-proxy
 cp nginx.conf.bak.<date> nginx.conf
 docker exec router-proxy nginx -t && docker exec router-proxy nginx -s reload

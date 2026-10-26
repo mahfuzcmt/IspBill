@@ -12,7 +12,7 @@ Last updated: 2026-05-15.
                           INTERNET
                               │
                               ▼
-                    [ AWS VPS (Mumbai) ]   103.187.22.131
+                    [ AWS VPS (Mumbai) ]   isp.sodaionline.com
                     │                  │
         ┌───────────┴──┐   ┌───────────┴────────────┐
         │ NetPulse app │   │ router-proxy nginx     │
@@ -53,7 +53,7 @@ Last updated: 2026-05-15.
 
 ## 2. VPS / containers
 
-VPS: `103.187.22.131` (Ubuntu 24.04, Mumbai region). SSH as `root`.
+VPS: `isp.sodaionline.com` (Ubuntu 24.04, Mumbai region). SSH as `root`.
 
 ```
 $ docker ps  --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
@@ -104,12 +104,12 @@ Everything under `overrides/` mirrors the same path under `/var/www/html/` insid
 
 | Layer | URL / endpoint | Credential |
 |---|---|---|
-| Admin panel | `http://103.187.22.131:8081/` (auto-redirects to admin) | admin / `<APP_ADMIN_PW>` |
-| Main Mikrotik Webfig (public) | `http://103.187.22.131:8090/` | admin / `<MT_ADMIN_PW>` |
+| Admin panel | `http://isp.sodaionline.com:8081/` (auto-redirects to admin) | admin / `<APP_ADMIN_PW>` |
+| Main Mikrotik Webfig (public) | `http://isp.sodaionline.com:8090/` | admin / `<MT_ADMIN_PW>` |
 | Main Mikrotik API (internal) | `10.99.0.2:8728` from inside WG | admin / `<MT_ADMIN_PW>` |
 | Secondary Mikrotik Webfig | `http://10.99.0.2:18080/` (WG-side only) | admin / `<MT2_ADMIN_PW>` |
 | Secondary Winbox / SSH / API | `10.99.0.2:18291` / `:18022` / `:18728` | admin / `<MT2_ADMIN_PW>` |
-| Expired-customer notice | `http://103.187.22.131:8081/index.php?_route=notice/<username>` | public |
+| Expired-customer notice | `http://isp.sodaionline.com:8081/index.php?_route=notice/<username>` | public |
 | MariaDB | inside Docker network as `nuxbill-db:3306` | phpnuxbill / `<DB_PW>` (also root with `<DB_ROOT_PW>`) |
 | WireGuard server | UDP 51820 on VPS | preshared peer key (in `wg0` config) |
 
@@ -282,7 +282,7 @@ CREATE TABLE tbl_wan_usage_daily (
 ### `tbl_appconfig` rows seeded
 ```sql
 INSERT IGNORE INTO tbl_appconfig (setting, value) VALUES
-    ('router_web_url',   'http://103.187.22.131:8090/'),
+    ('router_web_url',   'http://isp.sodaionline.com:8090/'),
     ('sms_enabled',      '1'),
     ('sms_api_url',      'https://bulksmsbd.net/api/smsapi'),
     ('sms_api_key',      '<SMS_API_KEY>'),
@@ -360,8 +360,8 @@ This is what the session has been doing repeatedly. Two parts:
 ### Push code (PHP/TPL changes)
 ```powershell
 # from local repo, copy to /tmp/, then atomic in-place replace
-pscp -batch -pw <root_pw> <local-file> root@103.187.22.131:/tmp/file.ext
-plink -batch -ssh -P 22 -l root -pw <root_pw> 103.187.22.131 \
+pscp -batch -pw <root_pw> <local-file> root@isp.sodaionline.com:/tmp/file.ext
+plink -batch -ssh -P 22 -l root -pw <root_pw> isp.sodaionline.com \
     'cat /tmp/file.ext > /opt/phpnuxbill/overrides/<path>/file.ext && \
      docker exec phpnuxbill-app sh -c "find /var/www/html/ui/compiled -maxdepth 1 -name *.tpl.php -delete"'
 ```
@@ -392,7 +392,7 @@ Use the API. Existing example scripts in this session show the pattern: connect 
 | `/index.php?_route=customers/live-traffic-data` | JSON for the live page |
 | `/index.php?_route=sms/settings` | SMS API + 4 templates |
 | `/index.php?_route=notice/<username>` | Public expired-customer notice |
-| `http://103.187.22.131:8090/` | Main Mikrotik Webfig (proxy) |
+| `http://isp.sodaionline.com:8090/` | Main Mikrotik Webfig (proxy) |
 
 ## 11. Things to do after the OLT is back online
 

@@ -100,7 +100,7 @@ ui/ui/customers-graph.tpl                     ← + Browsing button (consistency
 ### Step 0 — pre-flight on the VPS
 
 ```bash
-ssh root@103.187.22.131
+ssh root@isp.sodaionline.com
 
 # Confirm the walled-garden dnsmasq is healthy
 docker ps --filter name=dnsmasq --format '{{.Names}} {{.Status}}'
@@ -123,9 +123,9 @@ From your local repo:
 
 ```bash
 # Walled-garden artifacts (resolver + scripts)
-rsync -avz docs/dns-logging/dnsmasq-resolver/  root@103.187.22.131:/opt/phpnuxbill/dnsmasq-resolver/
-rsync -avz docs/dns-logging/scripts/           root@103.187.22.131:/opt/phpnuxbill/scripts/
-ssh root@103.187.22.131 "chmod +x /opt/phpnuxbill/scripts/lookup-dns.sh"
+rsync -avz docs/dns-logging/dnsmasq-resolver/  root@isp.sodaionline.com:/opt/phpnuxbill/dnsmasq-resolver/
+rsync -avz docs/dns-logging/scripts/           root@isp.sodaionline.com:/opt/phpnuxbill/scripts/
+ssh root@isp.sodaionline.com "chmod +x /opt/phpnuxbill/scripts/lookup-dns.sh"
 
 # IspBill app changes (controller + templates) — via the usual deploy.sh
 ./deploy.sh
@@ -134,8 +134,8 @@ ssh root@103.187.22.131 "chmod +x /opt/phpnuxbill/scripts/lookup-dns.sh"
 ### Step 2 — install logrotate config
 
 ```bash
-scp docs/dns-logging/logrotate.conf root@103.187.22.131:/etc/logrotate.d/dnsmasq-resolver
-ssh root@103.187.22.131 "
+scp docs/dns-logging/logrotate.conf root@isp.sodaionline.com:/etc/logrotate.d/dnsmasq-resolver
+ssh root@isp.sodaionline.com "
     chmod 644 /etc/logrotate.d/dnsmasq-resolver
     logrotate -d /etc/logrotate.d/dnsmasq-resolver   # dry-run — verify config
 "
@@ -191,7 +191,7 @@ rule must remain ABOVE the new dns-log rules.
 
 **Via the admin UI:**
 
-1. Open `http://103.187.22.131:8081/index.php?_route=customers/list`
+1. Open `http://isp.sodaionline.com:8081/index.php?_route=customers/list`
 2. Click any active customer with `Edit`
 3. Click **Browsing History** button at the bottom of the form (or the
    `Browsing` tab from the Diagnose / Graph page)
@@ -265,7 +265,7 @@ ssh admin@10.99.0.2
 /ip firewall nat remove [find comment="NetPulse-dns-log-tcp"]
 
 # 2. Containers
-ssh root@103.187.22.131
+ssh root@isp.sodaionline.com
 cd /opt/phpnuxbill
 docker compose stop dnsmasq-resolver && docker compose rm -f dnsmasq-resolver
 
