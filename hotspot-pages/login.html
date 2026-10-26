@@ -81,8 +81,8 @@ $(if error)<div class="err">$(error)</div>$(endif)
 <!-- Free Trial Section (only shown when the client is still trial-eligible) -->
 $(if trial == 'yes')
 <div class="trial-box">
-<h3>* <span class="js-trial-dur">১ ঘন্টা</span> ফ্রি ইন্টারনেট *</h3>
-<p>নাম ও মোবাইল নম্বর দিয়ে <span class="js-trial-dur">১ ঘন্টা</span> বিনামূল্যে ইন্টারনেট</p>
+<h3>* <span class="js-trial-dur">১০ মিনিট</span> ফ্রি ইন্টারনেট *</h3>
+<p>নাম ও মোবাইল নম্বর দিয়ে <span class="js-trial-dur">১০ মিনিট</span> বিনামূল্যে ইন্টারনেট</p>
 <div id="trial-message"></div>
 <form name="trial" id="trialForm" action="$(link-login-only)" method="post">
 <input type="hidden" name="dst" value="$(link-orig)">
@@ -108,7 +108,7 @@ $(if trial == 'yes')
 $(else)
 <!-- Trial quota used up for this device today (trial != yes) -> point to voucher sales -->
 <div class="notice-box">
-<h3>আপনার আজকের ফ্রি ট্রায়াল (<span class="js-trial-dur">১ ঘন্টা</span>) শেষ</h3>
+<h3>আপনার আজকের ফ্রি ট্রায়াল (<span class="js-trial-dur">১০ মিনিট</span>) শেষ</h3>
 <p>ইন্টারনেট চালিয়ে যেতে আমাদের নির্ধারিত দোকান থেকে ভাউচার কিনুন:</p>
 <ul>
 <li>বাবুল স্টোর, নলডাঙ্গা পুলিশ ক্যাম্পের পাশে</li>
@@ -116,7 +116,7 @@ $(else)
 <li>আহাদ টেলিকম, আলিফ সুপার মার্কেট</li>
 </ul>
 <button type="button" class="btn btn-voucher" onclick="showTab('voucher')">ভাউচার রিডিম করুন</button>
-<p class="small" style="margin-top:8px">আগামীকাল এই ডিভাইসে আবার <span class="js-trial-dur">১ ঘন্টা</span> ফ্রি পাবেন</p>
+<p class="small" style="margin-top:8px">আগামীকাল এই ডিভাইসে আবার <span class="js-trial-dur">১০ মিনিট</span> ফ্রি পাবেন</p>
 </div>
 <div class="divider">অথবা লগইন করুন</div>
 $(endif)
@@ -181,10 +181,19 @@ $(endif)
 <div class="label">পাসওয়ার্ড</div>
 <div class="value" id="show-password"></div>
 </div>
-<p style="text-align:center;color:#666;font-size:13px;margin-bottom:15px">
-এই পাসওয়ার্ড মনে রাখুন! এখন সাইন ইন করুন।
-</p>
-<button onclick="goToLogin()" class="btn">সাইন ইন করুন</button>
+<!-- Registration creates the billing account only; the router login is created
+     when the account is recharged. So don't tell them to sign in right away. -->
+<div class="notice-box">
+<h3>ইন্টারনেট এখনো চালু হয়নি</h3>
+<p>চালু করতে নিচের যেকোনো একটি করুন:</p>
+<ul>
+<li>দোকান থেকে ভাউচার কিনে "ভাউচার" ট্যাবে রিডিম করুন</li>
+<li>অথবা দোকানে এই মোবাইল নম্বরে প্যাকেজ রিচার্জ করুন, তারপর এই নম্বর ও পাসওয়ার্ড দিয়ে সাইন ইন করুন</li>
+</ul>
+<p class="small">পাসওয়ার্ডটি মনে রাখুন</p>
+</div>
+<button type="button" onclick="goToLogin(); showTab('voucher')" class="btn btn-voucher">ভাউচার রিডিম করুন</button>
+<button type="button" onclick="goToLogin()" class="btn" style="margin-top:10px">রিচার্জ করা আছে? সাইন ইন করুন</button>
 </div>
 </div>
 
@@ -235,21 +244,25 @@ function goToLogin() {
     showTab('login');
 }
 
+// Voucher codes are uppercase on the router and RouterOS logins are
+// case-sensitive. The input only *displays* uppercase (CSS), so normalise the
+// submitted value: trim, drop inner spaces, uppercase. Password = code.
 function setVoucherPassword() {
-    var code = document.querySelector('#voucher input[name="username"]').value;
+    var input = document.querySelector('#voucher input[name="username"]');
+    var code = (input.value || '').replace(/\s/g, '').toUpperCase();
+    input.value = code;
     document.querySelector('#voucher input[name="password"]').value = code;
 }
 
 document.querySelector('#voucher form').onsubmit = function() {
-    var code = document.querySelector('#voucher input[name="username"]').value;
-    document.querySelector('#voucher input[name="password"]').value = code;
+    setVoucherPassword();
     return true;
 };
 
 // Sync the displayed trial duration with the admin setting. login.html is served
 // statically by the router and can't read app config, so we fetch the configured
 // label on load and fill every .js-trial-dur span. Best-effort: if the billing
-// server is unreachable, the static "১ ঘন্টা" default already in the markup stays.
+// server is unreachable, the static "১০ মিনিট" default already in the markup stays.
 (function() {
     var spans = document.getElementsByClassName('js-trial-dur');
     if (!spans.length) return;
